@@ -1,29 +1,25 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
-import { User } from '../types';
+import type { User } from '@/types';
 import {
   getCurrentUser,
   setCurrentUser,
   getUsers,
   saveUsers,
-} from '../utils/storage';
+} from '@/lib/storage';
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (
-    username: string,
-    password: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  signup: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Simple "hash" — for PROTOTYPE only. Not real security.
 const simpleHash = (input: string): string => {
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
@@ -52,13 +48,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login: AuthContextValue['login'] = async (username, password) => {
     const trimmed = username.trim().toLowerCase();
     if (!trimmed || !password) {
-      return { success: false, error: 'Username and password are required' };
+      return { success: false, error: 'Username and password required' };
     }
     const users = await getUsers();
     const found = users.find((u) => u.username === trimmed);
-    if (!found) {
-      return { success: false, error: 'User not found' };
-    }
+    if (!found) return { success: false, error: 'User not found' };
     if (found.passwordHash !== simpleHash(password)) {
       return { success: false, error: 'Incorrect password' };
     }
@@ -70,14 +64,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signup: AuthContextValue['signup'] = async (username, password) => {
     const trimmed = username.trim().toLowerCase();
     if (!trimmed || !password) {
-      return { success: false, error: 'Username and password are required' };
+      return { success: false, error: 'Username and password required' };
     }
-    if (trimmed.length < 3) {
-      return { success: false, error: 'Username must be at least 3 characters' };
-    }
-    if (password.length < 4) {
-      return { success: false, error: 'Password must be at least 4 characters' };
-    }
+    if (trimmed.length < 3) return { success: false, error: 'Username too short (min 3)' };
+    if (password.length < 4) return { success: false, error: 'Password too short (min 4)' };
     const users = await getUsers();
     if (users.find((u) => u.username === trimmed)) {
       return { success: false, error: 'Username already exists' };
@@ -114,9 +104,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider
-      value={{ user, loading, login, signup, loginAsGuest, logout }}
-    >
+    <AuthContext.Provider value={{ user, loading, login, signup, loginAsGuest, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -24,16 +24,23 @@ class ApplicationModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ExpoApplication")
 
-    Constants {
-      return@Constants mapOf(
-        "applicationName" to applicationName,
-        "applicationId" to packageName,
-        "nativeApplicationVersion" to versionName,
-        "nativeBuildVersion" to versionCode.toString()
-      )
+    Constant("applicationName") {
+      context.applicationInfo.loadLabel(context.packageManager).toString()
     }
 
-    Property("androidId") {
+    Constant("applicationId") {
+      packageName
+    }
+
+    Constant("nativeApplicationVersion") {
+      packageManager.getPackageInfoCompat(packageName, 0).versionName
+    }
+
+    Constant("nativeBuildVersion") {
+      getLongVersionCode(packageManager.getPackageInfoCompat(packageName, 0)).toInt().toString()
+    }
+
+    Constant("androidId") {
       Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
     }
 
@@ -57,11 +64,14 @@ class ApplicationModule : Module() {
 
     AsyncFunction("getInstallReferrerAsync") { promise: Promise ->
       val installReferrer = StringBuilder()
+      var isSettled = false
 
       val referrerClient = InstallReferrerClient.newBuilder(context).build()
 
       referrerClient.startConnection(object : InstallReferrerStateListener {
         override fun onInstallReferrerSetupFinished(responseCode: Int) {
+          if (isSettled) return
+
           when (responseCode) {
             InstallReferrerClient.InstallReferrerResponse.OK -> {
               // Connection established and response received
@@ -71,38 +81,43 @@ class ApplicationModule : Module() {
               } catch (e: RemoteException) {
                 promise.reject("ERR_APPLICATION_INSTALL_REFERRER_REMOTE_EXCEPTION", "RemoteException getting install referrer information. This may happen if the process hosting the remote object is no longer available.", e)
                 return
+              } finally {
+                isSettled = true
               }
               promise.resolve(installReferrer.toString())
             }
 
-            InstallReferrerClient.InstallReferrerResponse.FEATURE_NOT_SUPPORTED -> // API not available in the current Play Store app
+            InstallReferrerClient.InstallReferrerResponse.FEATURE_NOT_SUPPORTED -> { // API not available in the current Play Store app
+              isSettled = true
               promise.reject("ERR_APPLICATION_INSTALL_REFERRER_UNAVAILABLE", "The current Play Store app doesn't provide the installation referrer API, or the Play Store may not be installed.", null)
+            }
 
-            InstallReferrerClient.InstallReferrerResponse.SERVICE_UNAVAILABLE -> // Connection could not be established
+            InstallReferrerClient.InstallReferrerResponse.SERVICE_UNAVAILABLE -> { // Connection could not be established
+              isSettled = true
               promise.reject("ERR_APPLICATION_INSTALL_REFERRER", "General error retrieving the install referrer: response code $responseCode", null)
+            }
 
-            else -> promise.reject("ERR_APPLICATION_INSTALL_REFERRER", "General error retrieving the install referrer: response code $responseCode", null)
+            else -> {
+              isSettled = true
+              promise.reject("ERR_APPLICATION_INSTALL_REFERRER", "General error retrieving the install referrer: response code $responseCode", null)
+            }
           }
           referrerClient.endConnection()
         }
 
         override fun onInstallReferrerServiceDisconnected() {
+          if (isSettled) return
+          isSettled = true
           promise.reject("ERR_APPLICATION_INSTALL_REFERRER_SERVICE_DISCONNECTED", "Connection to install referrer service was lost.", null)
         }
       })
     }
   }
 
-  private val applicationName
-    get() = context.applicationInfo.loadLabel(context.packageManager).toString()
   private val packageName
     get() = context.packageName
   private val packageManager
     get() = context.packageManager
-  private val versionName
-    get() = packageManager.getPackageInfoCompat(packageName, 0).versionName
-  private val versionCode
-    get() = getLongVersionCode(packageManager.getPackageInfoCompat(packageName, 0)).toInt()
 }
 
 private fun PackageManager.getPackageInfoCompat(packageName: String, flags: Int = 0): PackageInfo =

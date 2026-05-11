@@ -1,24 +1,18 @@
-// Theme - inspired by automotive dashboards
-// Dark, refined, with bold accent colors
 export const theme = {
   colors: {
-    // Backgrounds
     bg: '#0A0E1A',
     bgElevated: '#141927',
     bgCard: '#1A2030',
     bgInput: '#1F2638',
 
-    // Text
     textPrimary: '#F8FAFC',
     textSecondary: '#94A3B8',
     textMuted: '#64748B',
 
-    // Accents
-    accent: '#FF6B35', // bright orange - automotive
+    accent: '#FF6B35',
     accentDark: '#E5552A',
     accentSoft: 'rgba(255, 107, 53, 0.15)',
 
-    // Status
     success: '#10B981',
     successSoft: 'rgba(16, 185, 129, 0.15)',
     warning: '#F59E0B',
@@ -27,14 +21,11 @@ export const theme = {
     dangerSoft: 'rgba(239, 68, 68, 0.15)',
     info: '#3B82F6',
     infoSoft: 'rgba(59, 130, 246, 0.15)',
+    purple: '#8B5CF6',
+    purpleSoft: 'rgba(139, 92, 246, 0.15)',
 
-    // Borders / dividers
     border: '#2A3245',
     borderLight: '#1F2638',
-
-    // Special
-    chartGradientFrom: '#FF6B35',
-    chartGradientTo: '#FFA07A',
   },
   spacing: {
     xs: 4,

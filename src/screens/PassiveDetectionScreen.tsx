@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,12 @@ import {
   Alert,
   Switch,
   RefreshControl,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useFocusEffect } from "@react-navigation/native";
-import {
-  Vehicle,
-  RootStackParamList,
-  DetectionState,
-  PendingTrip,
-} from "../types";
-import { useAuth } from "../context/AuthContext";
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
+import { Vehicle, RootStackParamList, DetectionState, PendingTrip } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   getVehiclesForUser,
   getDetectionContext,
@@ -26,16 +21,16 @@ import {
   StateLogEntry,
   clearStateLog,
   getAwaitingConfirmation,
-} from "../utils/storage";
+} from '../utils/storage';
 import {
   startPassiveDetection,
   stopPassiveDetection,
   isPassiveDetectionActive,
-} from "../utils/passiveDetectionService";
-import { Button } from "../components/Button";
-import { theme } from "../theme";
+} from '../utils/passiveDetectionService';
+import { Button } from '../components/Button';
+import { theme } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, "PassiveDetection">;
+type Props = NativeStackScreenProps<RootStackParamList, 'PassiveDetection'>;
 
 const STATE_COLORS: Record<DetectionState, string> = {
   idle: theme.colors.textMuted,
@@ -48,33 +43,31 @@ const STATE_COLORS: Record<DetectionState, string> = {
 };
 
 const STATE_LABELS: Record<DetectionState, string> = {
-  idle: "IDLE",
-  monitoring: "MONITORING",
-  moving: "MOVEMENT DETECTED",
-  driving: "DRIVING",
-  stopped: "STOPPED",
-  validating: "VALIDATING END",
-  awaiting_confirmation: "AWAITING CONFIRMATION",
+  idle: 'IDLE',
+  monitoring: 'MONITORING',
+  moving: 'MOVEMENT DETECTED',
+  driving: 'DRIVING',
+  stopped: 'STOPPED',
+  validating: 'VALIDATING END',
+  awaiting_confirmation: 'AWAITING CONFIRMATION',
 };
 
 const STATE_DESCRIPTIONS: Record<DetectionState, string> = {
-  idle: "Detection is off. Toggle on to begin monitoring.",
-  monitoring: "Waiting for movement. App will sleep until OS wakes it.",
-  moving: "Movement detected — evaluating if this is driving.",
-  driving: "Driving confirmed. Distance is being tracked.",
-  stopped: "Speed dropped — checking if trip has ended.",
-  validating: "5-minute validation window — confirming end of trip.",
-  awaiting_confirmation: "Trip ready for review. Check your notifications.",
+  idle: 'Detection is off. Toggle on to begin monitoring.',
+  monitoring: 'Waiting for movement. App will sleep until OS wakes it.',
+  moving: 'Movement detected — evaluating if this is driving.',
+  driving: 'Driving confirmed. Distance is being tracked.',
+  stopped: 'Speed dropped — checking if trip has ended.',
+  validating: '5-minute validation window — confirming end of trip.',
+  awaiting_confirmation: 'Trip ready for review. Check your notifications.',
 };
 
 export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
-    null
-  );
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
-  const [state, setState] = useState<DetectionState>("idle");
+  const [state, setState] = useState<DetectionState>('idle');
   const [snapshotCount, setSnapshotCount] = useState(0);
   const [accumulatedKm, setAccumulatedKm] = useState(0);
   const [stateLog, setStateLog] = useState<StateLogEntry[]>([]);
@@ -97,7 +90,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
       setAccumulatedKm(ctx.accumulatedDistanceKm);
       if (ctx.selectedVehicleId) setSelectedVehicleId(ctx.selectedVehicleId);
     } else {
-      setState("idle");
+      setState('idle');
     }
 
     const log = await getStateLog();
@@ -127,26 +120,20 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
     setBusy(true);
     if (next) {
       if (!selectedVehicleId) {
-        Alert.alert(
-          "Select a vehicle",
-          "Please select which vehicle to track first."
-        );
+        Alert.alert('Select a vehicle', 'Please select which vehicle to track first.');
         setBusy(false);
         return;
       }
       const result = await startPassiveDetection(selectedVehicleId);
       if (!result.success) {
-        Alert.alert(
-          "Could not start detection",
-          result.error || "Unknown error"
-        );
+        Alert.alert('Could not start detection', result.error || 'Unknown error');
         setBusy(false);
         return;
       }
       setEnabled(true);
       Alert.alert(
-        "Detection Active",
-        "The app will monitor for driving in the background. You can close the app — a notification will appear when a trip is detected."
+        'Detection Active',
+        'The app will monitor for driving in the background. You can close the app — a notification will appear when a trip is detected.'
       );
     } else {
       await stopPassiveDetection();
@@ -163,14 +150,11 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
-    return `${d.getHours().toString().padStart(2, "0")}:${d
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerBar}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>← Back</Text>
@@ -182,11 +166,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.colors.accent}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
         }
       >
         {/* Pending trips banner */}
@@ -194,17 +174,14 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={styles.pendingBanner}
             onPress={() =>
-              navigation.navigate("ConfirmTrip", {
-                pendingTripId: pending[0].id,
-              })
+              navigation.navigate('ConfirmTrip', { pendingTripId: pending[0].id })
             }
             activeOpacity={0.85}
           >
             <View style={styles.pendingDot} />
             <View style={{ flex: 1 }}>
               <Text style={styles.pendingTitle}>
-                {pending.length} trip{pending.length > 1 ? "s" : ""} awaiting
-                confirmation
+                {pending.length} trip{pending.length > 1 ? 's' : ''} awaiting confirmation
               </Text>
               <Text style={styles.pendingSubtitle}>
                 Tap to review and confirm
@@ -218,19 +195,12 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.stateCard}>
           <Text style={styles.stateLabel}>CURRENT STATE</Text>
           <View style={styles.stateRow}>
-            <View
-              style={[
-                styles.stateDot,
-                { backgroundColor: STATE_COLORS[state] },
-              ]}
-            />
+            <View style={[styles.stateDot, { backgroundColor: STATE_COLORS[state] }]} />
             <Text style={[styles.stateValue, { color: STATE_COLORS[state] }]}>
               {STATE_LABELS[state]}
             </Text>
           </View>
-          <Text style={styles.stateDescription}>
-            {STATE_DESCRIPTIONS[state]}
-          </Text>
+          <Text style={styles.stateDescription}>{STATE_DESCRIPTIONS[state]}</Text>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
@@ -239,10 +209,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>TRIP DISTANCE</Text>
-              <Text style={styles.statValue}>
-                {accumulatedKm.toFixed(2)}
-                <Text style={styles.statUnit}> km</Text>
-              </Text>
+              <Text style={styles.statValue}>{accumulatedKm.toFixed(2)}<Text style={styles.statUnit}> km</Text></Text>
             </View>
           </View>
         </View>
@@ -266,9 +233,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={enabled ? 1 : 0.85}
                 disabled={enabled}
               >
-                <Text style={styles.vehicleEmoji}>
-                  {v.type === "car" ? "🚗" : "🏍️"}
-                </Text>
+                <Text style={styles.vehicleEmoji}>{v.type === 'car' ? '🚗' : '🏍️'}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.vehicleName}>
                     {v.nickname || `${v.make} ${v.model}`}
@@ -294,19 +259,16 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.toggleTitle}>Background Detection</Text>
             <Text style={styles.toggleSubtitle}>
               {enabled
-                ? "Active — close the app and drive somewhere to test"
-                : "Disabled — toggle on to start monitoring"}
+                ? 'Active — close the app and drive somewhere to test'
+                : 'Disabled — toggle on to start monitoring'}
             </Text>
           </View>
           <Switch
             value={enabled}
             onValueChange={handleToggle}
             disabled={busy || vehicles.length === 0 || !selectedVehicleId}
-            trackColor={{
-              false: theme.colors.border,
-              true: theme.colors.accent,
-            }}
-            thumbColor={enabled ? "#fff" : theme.colors.textMuted}
+            trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+            thumbColor={enabled ? '#fff' : theme.colors.textMuted}
           />
         </View>
 
@@ -316,7 +278,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
           onPress={() => setShowDebug(!showDebug)}
         >
           <Text style={styles.debugToggleText}>
-            {showDebug ? "▼" : "▶"} STATE MACHINE LOG
+            {showDebug ? '▼' : '▶'} STATE MACHINE LOG
           </Text>
           <Text style={styles.debugCount}>{stateLog.length} events</Text>
         </TouchableOpacity>
@@ -336,34 +298,24 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
 
             {stateLog.length === 0 ? (
               <Text style={styles.debugEmpty}>
-                No events yet. Toggle detection on and move around to see the
-                state machine in action.
+                No events yet. Toggle detection on and move around to see the state machine in action.
               </Text>
             ) : (
               stateLog.slice(0, 20).map((entry, idx) => (
                 <View key={idx} style={styles.logEntry}>
                   <View style={styles.logHeader}>
-                    <Text style={styles.logTime}>
-                      {formatTime(entry.timestamp)}
-                    </Text>
+                    <Text style={styles.logTime}>{formatTime(entry.timestamp)}</Text>
                     <View
                       style={[
                         styles.logStateBadge,
-                        {
-                          backgroundColor:
-                            STATE_COLORS[entry.state as DetectionState] ||
-                            theme.colors.textMuted,
-                        },
+                        { backgroundColor: STATE_COLORS[entry.state as DetectionState] || theme.colors.textMuted },
                       ]}
                     >
-                      <Text style={styles.logStateText}>
-                        {entry.state.toUpperCase()}
-                      </Text>
+                      <Text style={styles.logStateText}>{entry.state.toUpperCase()}</Text>
                     </View>
                   </View>
                   <Text style={styles.logReason}>{entry.reason}</Text>
-                  {(entry.speed !== undefined ||
-                    entry.distance !== undefined) && (
+                  {(entry.speed !== undefined || entry.distance !== undefined) && (
                     <View style={styles.logMetrics}>
                       {entry.speed !== undefined && (
                         <Text style={styles.logMetric}>
@@ -387,71 +339,13 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>HOW IT WORKS</Text>
           <Text style={styles.infoText}>
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              1.
-            </Text>{" "}
-            The OS wakes the app every ~30 seconds OR when you've moved 50m
-            {"\n"}
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              2.
-            </Text>{" "}
-            A GPS snapshot is taken and added to a 10-snapshot rolling window
-            {"\n"}
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              3.
-            </Text>{" "}
-            The state machine evaluates speed, consistency, and stops{"\n"}
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              4.
-            </Text>{" "}
-            If 2+ consecutive readings show 15+ km/h → DRIVING{"\n"}
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              5.
-            </Text>{" "}
-            Distance accumulates only while in DRIVING state{"\n"}
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              6.
-            </Text>{" "}
-            When stopped 5+ min → notification asks for confirmation{"\n"}
-            <Text
-              style={{
-                color: theme.colors.accent,
-                fontWeight: theme.fontWeight.bold,
-              }}
-            >
-              7.
-            </Text>{" "}
-            Confirmed trips update your vehicle's odometer
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>1.</Text> The OS wakes the app every ~30 seconds OR when you've moved 50m{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>2.</Text> A GPS snapshot is taken and added to a 10-snapshot rolling window{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>3.</Text> The state machine evaluates speed, consistency, and stops{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>4.</Text> If 2+ consecutive readings show 15+ km/h → DRIVING{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>5.</Text> Distance accumulates only while in DRIVING state{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>6.</Text> When stopped 5+ min → notification asks for confirmation{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>7.</Text> Confirmed trips update your vehicle's odometer
           </Text>
         </View>
 
@@ -459,7 +353,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.warningBox}>
           <Text style={styles.warningTitle}>⚠ NOTE</Text>
           <Text style={styles.warningText}>
-            Background detection might consume more Battery than intended.
+            Background detection requires a custom dev build (npx expo prebuild). It does not work in Expo Go. The app must remain installed and not force-killed.
           </Text>
         </View>
       </ScrollView>
@@ -470,9 +364,9 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   headerBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
@@ -493,8 +387,8 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xxxl,
   },
   pendingBanner: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.accentSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -539,8 +433,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   stateRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: theme.spacing.sm,
   },
   stateDot: {
@@ -561,7 +455,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   statsRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     marginTop: theme.spacing.lg,
     gap: theme.spacing.sm,
   },
@@ -598,12 +492,12 @@ const styles = StyleSheet.create({
   emptyText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.md,
-    fontStyle: "italic",
+    fontStyle: 'italic',
     marginBottom: theme.spacing.lg,
   },
   vehicleItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -638,8 +532,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accent,
   },
   toggleCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
@@ -658,9 +552,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   debugToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: theme.spacing.lg,
     marginTop: theme.spacing.md,
   },
@@ -683,9 +577,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   debugHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: theme.spacing.sm,
   },
   debugHeaderText: {
@@ -700,7 +594,7 @@ const styles = StyleSheet.create({
   debugEmpty: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.sm,
-    fontStyle: "italic",
+    fontStyle: 'italic',
     paddingVertical: theme.spacing.md,
   },
   logEntry: {
@@ -709,14 +603,14 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderLight,
   },
   logHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
   },
   logTime: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.xs,
-    fontFamily: "monospace" as any,
+    fontFamily: 'monospace' as any,
     marginRight: theme.spacing.sm,
   },
   logStateBadge: {
@@ -725,7 +619,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   logStateText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 10,
     fontWeight: theme.fontWeight.bold,
     letterSpacing: 0.5,
@@ -735,7 +629,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
   logMetrics: {
-    flexDirection: "row",
+    flexDirection: 'row',
     marginTop: 4,
     gap: theme.spacing.md,
   },

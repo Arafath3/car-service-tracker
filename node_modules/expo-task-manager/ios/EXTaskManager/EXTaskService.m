@@ -3,11 +3,13 @@
 #import <ExpoModulesCore/EXDefines.h>
 #import <ExpoModulesCore/EXTaskConsumerInterface.h>
 
-#import <EXTaskManager/EXTask.h>
-#import <EXTaskManager/EXTaskService.h>
+#import <ExpoTaskManager/EXTask.h>
+#import <ExpoTaskManager/EXTaskService.h>
 
 #import <UMAppLoader/UMAppLoaderProvider.h>
 #import <UMAppLoader/UMAppRecordInterface.h>
+
+#import <React/RCTLog.h>
 
 @interface EXTaskService ()
 
@@ -37,7 +39,16 @@
 
 @implementation EXTaskService
 
-EX_REGISTER_SINGLETON_MODULE(TaskService)
++ (nonnull EXTaskService *)shared
+{
+  static EXTaskService *sharedInstance = nil;
+  static dispatch_once_t onceToken;
+
+  dispatch_once(&onceToken, ^{
+    sharedInstance = [[EXTaskService alloc] init];
+  });
+  return sharedInstance;
+}
 
 - (instancetype)init
 {
@@ -113,12 +124,14 @@ EX_REGISTER_SINGLETON_MODULE(TaskService)
   
   if (!task) {
     NSString *reason = [NSString stringWithFormat:@"Task '%@' not found for app ID '%@'.", taskName, appId];
-    @throw [NSException exceptionWithName:@"E_TASK_NOT_FOUND" reason:reason userInfo:nil];
+    NSDictionary<NSString *, id> *errorInfo = @{NSLocalizedDescriptionKey: reason};
+    @throw [NSException exceptionWithName:@"E_TASK_NOT_FOUND" reason:reason userInfo:errorInfo];
   }
   
   if (consumerClass != nil && ![task.consumer isMemberOfClass:[self _unversionedClassFromClass:consumerClass]]) {
     NSString *reason = [NSString stringWithFormat:@"Invalid task consumer. Cannot unregister task with name '%@' because it is associated with different consumer class.", taskName];
-    @throw [NSException exceptionWithName:@"E_INVALID_TASK_CONSUMER" reason:reason userInfo:nil];
+    NSDictionary<NSString *, id> *errorInfo = @{NSLocalizedDescriptionKey: reason};
+    @throw [NSException exceptionWithName:@"E_INVALID_TASK_CONSUMER" reason:reason userInfo:errorInfo];
   }
   
   NSMutableDictionary *appTasks = [[self _getTasksForAppId:appId] mutableCopy];
@@ -453,7 +466,7 @@ EX_REGISTER_SINGLETON_MODULE(TaskService)
 {
   // Uses required reason API based on the following reason: CA92.1
   NSUserDefaults *userDefaults = [NSUserDefaults standardUserDefaults];
-  [userDefaults setObject:dict forKey:NSStringFromClass([self class])];
+  [userDefaults setObject:[self sanitizeDictForUserDefaults:dict] forKey:NSStringFromClass([self class])];
   [userDefaults synchronize];
 }
 
@@ -613,7 +626,7 @@ EX_REGISTER_SINGLETON_MODULE(TaskService)
                                   consumerClass:consumerClass
                                         options:taskConfig[@"options"]];
           } else {
-            EXLogWarn(
+            RCTLogWarn(
                       @"EXTaskService: Task consumer '%@' has version '%d' that is not compatible with the saved version '%d'.",
                       consumerClassName,
                       currentConsumerVersion,
@@ -622,7 +635,7 @@ EX_REGISTER_SINGLETON_MODULE(TaskService)
             [self _removeTaskFromConfig:taskName appId:appId];
           }
         } else {
-          EXLogWarn(@"EXTaskService: Cannot restore task '%@' because consumer class doesn't exist.", taskName);
+          RCTLogWarn(@"EXTaskService: Cannot restore task '%@' because consumer class doesn't exist.", taskName);
           [self _removeTaskFromConfig:taskName appId:appId];
         }
       }
@@ -688,12 +701,14 @@ EX_REGISTER_SINGLETON_MODULE(TaskService)
   if (launchOptions[UIApplicationLaunchOptionsLocationKey]) {
     return EXTaskLaunchReasonLocation;
   }
+#if !TARGET_OS_TV
   if (launchOptions[UIApplicationLaunchOptionsNewsstandDownloadsKey]) {
     return EXTaskLaunchReasonNewsstandDownloads;
   }
   if (launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey]) {
     return EXTaskLaunchReasonRemoteNotification;
   }
+#endif
   return EXTaskLaunchReasonUnrecognized;
 }
 
@@ -741,6 +756,64 @@ EX_REGISTER_SINGLETON_MODULE(TaskService)
 {
   NSString *unversionedClassName = [self _unversionedClassNameFromClass:versionedClass];
   return NSClassFromString(unversionedClassName);
+}
+
+/**
+ Cleans up an NSDictionary so that it is suitable for NSUserDefaults by removing NSNull values
+ The method will recurse into arrays and child dictionaries
+ */
+- (NSDictionary *)sanitizeDictForUserDefaults:(NSDictionary *)dict {
+  NSMutableDictionary *sanitized = [NSMutableDictionary dictionary];
+  
+  [dict enumerateKeysAndObjectsUsingBlock:^(id key, id value, BOOL *stop) {
+    if ([value isKindOfClass:[NSString class]] ||
+        [value isKindOfClass:[NSNumber class]] ||
+        [value isKindOfClass:[NSData class]] ||
+        [value isKindOfClass:[NSDate class]]) {
+      sanitized[key] = value;
+    } else if ([value isKindOfClass:[NSArray class]]) {
+      // Recurse into NSArray
+      sanitized[key] = [self sanitizeArrayForUserDefaults:value];
+    } else if ([value isKindOfClass:[NSDictionary class]]) {
+      // Recurse into NSDictionary
+      sanitized[key] = [self sanitizeDictForUserDefaults:value];
+    } else if ([value isKindOfClass:[NSNull class]]) {
+      // Skip NSNull
+    } else {
+      // Skip - Should never get here since all types should be handled
+    }
+  }];
+  
+  return [sanitized copy];
+}
+
+/**
+ Cleans up an NSArray so that it is suitable for NSUserDefaults by removing NSNull values
+ The method will recurse into arrays and child dictionaries
+ */
+- (NSArray *)sanitizeArrayForUserDefaults:(NSArray *)array {
+  NSMutableArray *sanitized = [NSMutableArray array];
+  
+  [array enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+    if ([obj isKindOfClass:[NSString class]] ||
+        [obj isKindOfClass:[NSNumber class]] ||
+        [obj isKindOfClass:[NSData class]] ||
+        [obj isKindOfClass:[NSDate class]]) {
+      [sanitized addObject:obj];
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+      // Recurse into NSArray
+      [sanitized addObject:[self sanitizeArrayForUserDefaults:obj]];
+    } else if ([obj isKindOfClass:[NSDictionary class]]) {
+      // Recurse into NSDictionary
+      [sanitized addObject:[self sanitizeDictForUserDefaults:obj]];
+    } else if ([obj isKindOfClass:[NSNull class]]) {
+      // Skip NSNull
+    } else {
+      // Skip - Should never get here since all types should be handled
+    }
+  }];
+  
+  return [sanitized copy];
 }
 
 @end

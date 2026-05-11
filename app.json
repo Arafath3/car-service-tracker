@@ -1,53 +1,34 @@
 {
   "expo": {
-    "name": "CarServiceTracker",
-    "slug": "car-service-tracker",
+    "name": "Service Tracker",
+    "slug": "service-tracker",
+    "scheme": "servicetracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app uses your location to track distance driven for service reminders.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to track distance driven for service reminders.",
-        "UIBackgroundModes": [
-          "location",
-          "fetch"
-        ]
-      }
+      "backgroundColor": "#0A0E1A"
     },
     "android": {
-      "package": "com.example.carservicetracker",
+      "package": "com.example.servicetracker",
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
-        "POST_NOTIFICATIONS",
-        "WAKE_LOCK",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK"
       ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
+      "expo-router",
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow CarServiceTracker to detect when you're driving so it can automatically log trips.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Service Tracker to detect when you're driving so it can automatically log trips.",
+          "locationWhenInUsePermission": "Allow Service Tracker to track your trip distance.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
@@ -59,9 +40,13 @@
         }
       ]
     ],
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "69d047b9-f2ee-4b58-96cb-17f26f7e0396"
+        "projectId": "c4257008-7228-40e6-a8fb-ac1871d843eb"
       }
     }
   }

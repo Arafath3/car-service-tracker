@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, Text, StyleSheet, TextInputProps } from 'react-native';
-import { theme } from '../theme';
+import { theme } from '@/theme';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -35,9 +35,7 @@ export const Input: React.FC<Props> = ({ label, error, hint, style, ...rest }) =
 };
 
 const styles = StyleSheet.create({
-  wrapper: {
-    marginBottom: theme.spacing.lg,
-  },
+  wrapper: { marginBottom: theme.spacing.lg },
   label: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
@@ -56,12 +54,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  inputFocused: {
-    borderColor: theme.colors.accent,
-  },
-  inputError: {
-    borderColor: theme.colors.danger,
-  },
+  inputFocused: { borderColor: theme.colors.accent },
+  inputError: { borderColor: theme.colors.danger },
   error: {
     color: theme.colors.danger,
     fontSize: theme.fontSize.sm,

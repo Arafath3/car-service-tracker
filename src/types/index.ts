@@ -47,35 +47,32 @@ export interface Trip {
   startOdometer: number;
   endOdometer?: number;
   isActive: boolean;
-  source?: 'manual' | 'passive'; // tracks how trip was created
+  source?: 'manual' | 'passive';
 }
 
 // ============================================================================
-// PASSIVE DETECTION TYPES
+// PASSIVE DETECTION
 // ============================================================================
 
-// State machine states for driving detection
 export type DetectionState =
-  | 'idle' // Not monitoring at all
-  | 'monitoring' // Background snapshots running, waiting for movement
-  | 'moving' // Movement detected, evaluating if it's driving
-  | 'driving' // Confirmed driving, accumulating distance
-  | 'stopped' // Speed dropped, may be end of trip
-  | 'validating' // 5-min wait to confirm trip ended
-  | 'awaiting_confirmation'; // Notification sent, waiting for user response
+  | 'idle'
+  | 'monitoring'
+  | 'moving'
+  | 'driving'
+  | 'stopped'
+  | 'validating'
+  | 'awaiting_confirmation';
 
-// One GPS snapshot - the building block of detection
 export interface LocationSnapshot {
   id: string;
-  timestamp: number; // Unix ms
+  timestamp: number;
   latitude: number;
   longitude: number;
-  accuracy?: number; // meters
-  speed?: number; // m/s from GPS
-  computedSpeedKmh?: number; // calculated from previous snapshot
+  accuracy?: number;
+  speed?: number;
+  computedSpeedKmh?: number;
 }
 
-// A pending trip detected by passive system, awaiting user confirmation
 export interface PendingTrip {
   id: string;
   vehicleId: string;
@@ -89,28 +86,28 @@ export interface PendingTrip {
   createdAt: string;
 }
 
-// State machine context - persisted to disk so it survives app restarts
 export interface DetectionContext {
   state: DetectionState;
   enabled: boolean;
   selectedVehicleId: string | null;
-  recentSnapshots: LocationSnapshot[]; // rolling window
+  recentSnapshots: LocationSnapshot[];
   currentTripStartTime: number | null;
-  currentTripStartIndex: number | null; // index into recentSnapshots
+  currentTripStartIndex: number | null;
   accumulatedDistanceKm: number;
   stoppedSinceTimestamp: number | null;
   lastStateChangeAt: number;
   totalSnapshotsTaken: number;
 }
 
-export type RootStackParamList = {
-  Login: undefined;
-  Signup: undefined;
-  Home: undefined;
-  AddVehicle: undefined;
-  VehicleDetail: { vehicleId: string };
-  TrackTrip: { vehicleId: string };
-  AddService: { vehicleId: string };
-  PassiveDetection: undefined;
-  ConfirmTrip: { pendingTripId: string };
-};
+// User-tunable thresholds for the detection engine.
+// Persisted to disk so demo settings survive app restarts.
+export interface DetectionConfig {
+  drivingMinKmh: number;
+  walkingMaxKmh: number;
+  movementSpeedKmh: number;
+  consecutiveDrivingRequired: number;
+  consecutiveStoppedRequired: number;
+  validationDurationMs: number;
+  rollingWindowSize: number;
+  roadCompensationFactor: number;
+}

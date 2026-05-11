@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { theme } from '../theme';
+import { theme } from '@/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
@@ -40,7 +40,7 @@ export const Button: React.FC<Props> = ({
   const fontSize =
     size === 'sm' ? theme.fontSize.sm : size === 'lg' ? theme.fontSize.lg : theme.fontSize.md;
 
-  const variantStyles: Record<Variant, { bg: string; border: string; text: string }> = {
+  const variants: Record<Variant, { bg: string; border: string; text: string }> = {
     primary: { bg: theme.colors.accent, border: theme.colors.accent, text: '#fff' },
     secondary: {
       bg: theme.colors.bgElevated,
@@ -51,7 +51,7 @@ export const Button: React.FC<Props> = ({
     danger: { bg: theme.colors.danger, border: theme.colors.danger, text: '#fff' },
   };
 
-  const v = variantStyles[variant];
+  const v = variants[variant];
 
   return (
     <TouchableOpacity
