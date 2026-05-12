@@ -50,6 +50,9 @@
       "eas": {
         "projectId": "c4257008-7228-40e6-a8fb-ac1871d843eb"
       }
+    },
+    "ios": {
+      "bundleIdentifier": "com.example.servicetracker"
     }
   }
 }
