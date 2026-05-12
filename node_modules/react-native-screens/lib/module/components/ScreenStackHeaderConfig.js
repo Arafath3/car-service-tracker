@@ -3,6 +3,7 @@
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 import React from 'react';
 import { Image, Platform, StyleSheet } from 'react-native';
+import featureFlags from '../flags';
 
 // Native components
 import ScreenStackHeaderConfigNativeComponent from '../fabric/ScreenStackHeaderConfigNativeComponent';
@@ -58,19 +59,22 @@ export const ScreenStackHeaderConfig = /*#__PURE__*/React.forwardRef((props, ref
     }
   } : undefined;
   return /*#__PURE__*/React.createElement(ScreenStackHeaderConfigNativeComponent, _extends({}, props, {
+    userInterfaceStyle: props.experimental_userInterfaceStyle,
     headerLeftBarButtonItems: preparedHeaderLeftBarButtonItems,
     headerRightBarButtonItems: preparedHeaderRightBarButtonItems,
     onPressHeaderBarButtonItem: onPressHeaderBarButtonItem,
     onPressHeaderBarButtonMenuItem: onPressHeaderBarButtonMenuItem,
     ref: ref,
     style: styles.headerConfig,
-    pointerEvents: "box-none"
+    pointerEvents: "box-none",
+    synchronousShadowStateUpdatesEnabled: featureFlags.experiment.synchronousHeaderConfigUpdatesEnabled
   }));
 });
 ScreenStackHeaderConfig.displayName = 'ScreenStackHeaderConfig';
 export const ScreenStackHeaderBackButtonImage = props => /*#__PURE__*/React.createElement(ScreenStackHeaderSubview, {
   type: "back",
-  style: styles.headerSubview
+  style: styles.headerSubview,
+  synchronousShadowStateUpdatesEnabled: featureFlags.experiment.synchronousHeaderSubviewUpdatesEnabled
 }, /*#__PURE__*/React.createElement(Image, _extends({
   resizeMode: "center",
   fadeDuration: 0
@@ -82,6 +86,7 @@ export const ScreenStackHeaderRightView = props => {
   } = props;
   return /*#__PURE__*/React.createElement(ScreenStackHeaderSubview, _extends({}, rest, {
     type: "right",
+    synchronousShadowStateUpdatesEnabled: featureFlags.experiment.synchronousHeaderSubviewUpdatesEnabled,
     style: [styles.headerSubview, style]
   }));
 };
@@ -92,6 +97,7 @@ export const ScreenStackHeaderLeftView = props => {
   } = props;
   return /*#__PURE__*/React.createElement(ScreenStackHeaderSubview, _extends({}, rest, {
     type: "left",
+    synchronousShadowStateUpdatesEnabled: featureFlags.experiment.synchronousHeaderSubviewUpdatesEnabled,
     style: [styles.headerSubview, style]
   }));
 };
@@ -102,11 +108,13 @@ export const ScreenStackHeaderCenterView = props => {
   } = props;
   return /*#__PURE__*/React.createElement(ScreenStackHeaderSubview, _extends({}, rest, {
     type: "center",
+    synchronousShadowStateUpdatesEnabled: featureFlags.experiment.synchronousHeaderSubviewUpdatesEnabled,
     style: [styles.headerSubviewCenter, style]
   }));
 };
 export const ScreenStackHeaderSearchBarView = props => /*#__PURE__*/React.createElement(ScreenStackHeaderSubview, _extends({}, props, {
   type: "searchBar",
+  synchronousShadowStateUpdatesEnabled: featureFlags.experiment.synchronousHeaderSubviewUpdatesEnabled,
   style: styles.headerSubview
 }));
 const styles = StyleSheet.create({

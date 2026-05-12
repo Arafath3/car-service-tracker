@@ -7,6 +7,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.ScreenStackHeaderSubview = exports.ScreenStackHeaderSearchBarView = exports.ScreenStackHeaderRightView = exports.ScreenStackHeaderLeftView = exports.ScreenStackHeaderConfig = exports.ScreenStackHeaderCenterView = exports.ScreenStackHeaderBackButtonImage = void 0;
 var _react = _interopRequireDefault(require("react"));
 var _reactNative = require("react-native");
+var _flags = _interopRequireDefault(require("../flags"));
 var _ScreenStackHeaderConfigNativeComponent = _interopRequireDefault(require("../fabric/ScreenStackHeaderConfigNativeComponent"));
 var _ScreenStackHeaderSubviewNativeComponent = _interopRequireDefault(require("../fabric/ScreenStackHeaderSubviewNativeComponent"));
 var _prepareHeaderBarButtonItems = require("./helpers/prepareHeaderBarButtonItems");
@@ -62,19 +63,22 @@ const ScreenStackHeaderConfig = exports.ScreenStackHeaderConfig = /*#__PURE__*/_
     }
   } : undefined;
   return /*#__PURE__*/_react.default.createElement(_ScreenStackHeaderConfigNativeComponent.default, _extends({}, props, {
+    userInterfaceStyle: props.experimental_userInterfaceStyle,
     headerLeftBarButtonItems: preparedHeaderLeftBarButtonItems,
     headerRightBarButtonItems: preparedHeaderRightBarButtonItems,
     onPressHeaderBarButtonItem: onPressHeaderBarButtonItem,
     onPressHeaderBarButtonMenuItem: onPressHeaderBarButtonMenuItem,
     ref: ref,
     style: styles.headerConfig,
-    pointerEvents: "box-none"
+    pointerEvents: "box-none",
+    synchronousShadowStateUpdatesEnabled: _flags.default.experiment.synchronousHeaderConfigUpdatesEnabled
   }));
 });
 ScreenStackHeaderConfig.displayName = 'ScreenStackHeaderConfig';
 const ScreenStackHeaderBackButtonImage = props => /*#__PURE__*/_react.default.createElement(ScreenStackHeaderSubview, {
   type: "back",
-  style: styles.headerSubview
+  style: styles.headerSubview,
+  synchronousShadowStateUpdatesEnabled: _flags.default.experiment.synchronousHeaderSubviewUpdatesEnabled
 }, /*#__PURE__*/_react.default.createElement(_reactNative.Image, _extends({
   resizeMode: "center",
   fadeDuration: 0
@@ -87,6 +91,7 @@ const ScreenStackHeaderRightView = props => {
   } = props;
   return /*#__PURE__*/_react.default.createElement(ScreenStackHeaderSubview, _extends({}, rest, {
     type: "right",
+    synchronousShadowStateUpdatesEnabled: _flags.default.experiment.synchronousHeaderSubviewUpdatesEnabled,
     style: [styles.headerSubview, style]
   }));
 };
@@ -98,6 +103,7 @@ const ScreenStackHeaderLeftView = props => {
   } = props;
   return /*#__PURE__*/_react.default.createElement(ScreenStackHeaderSubview, _extends({}, rest, {
     type: "left",
+    synchronousShadowStateUpdatesEnabled: _flags.default.experiment.synchronousHeaderSubviewUpdatesEnabled,
     style: [styles.headerSubview, style]
   }));
 };
@@ -109,12 +115,14 @@ const ScreenStackHeaderCenterView = props => {
   } = props;
   return /*#__PURE__*/_react.default.createElement(ScreenStackHeaderSubview, _extends({}, rest, {
     type: "center",
+    synchronousShadowStateUpdatesEnabled: _flags.default.experiment.synchronousHeaderSubviewUpdatesEnabled,
     style: [styles.headerSubviewCenter, style]
   }));
 };
 exports.ScreenStackHeaderCenterView = ScreenStackHeaderCenterView;
 const ScreenStackHeaderSearchBarView = props => /*#__PURE__*/_react.default.createElement(ScreenStackHeaderSubview, _extends({}, props, {
   type: "searchBar",
+  synchronousShadowStateUpdatesEnabled: _flags.default.experiment.synchronousHeaderSubviewUpdatesEnabled,
   style: styles.headerSubview
 }));
 exports.ScreenStackHeaderSearchBarView = ScreenStackHeaderSearchBarView;
