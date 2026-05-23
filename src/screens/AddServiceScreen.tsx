@@ -7,13 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
-import { Vehicle, RootStackParamList } from '../types';
-import { getVehicles, addService } from '../utils/storage';
+import { RootStackParamList, Vehicle } from '../types';
+import { addService } from '../utils/storage';
+import { useVehicles } from '../hooks/useVehicles';
 import { getServiceIntervals } from '../utils/serviceIntervals';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -23,6 +23,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AddService'>;
 
 export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
   const { vehicleId } = route.params;
+  const { vehicles, loading: loadingVehicles } = useVehicles();
+
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [serviceType, setServiceType] = useState('');
   const [odometer, setOdometer] = useState('');
@@ -32,28 +34,34 @@ export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const all = await getVehicles();
-      const v = all.find((x) => x.id === vehicleId);
+    if (!loadingVehicles && vehicles.length > 0) {
+      const v = vehicles.find((x) => x.id === vehicleId);
       if (v) {
         setVehicle(v);
-        setOdometer(String(v.currentOdometer));
+
+        if (!odometer) {
+          setOdometer(String(v.currentOdometer));
+        }
       }
-    })();
-  }, [vehicleId]);
+    }
+  }, [vehicles, vehicleId, loadingVehicles, odometer]);
 
   const handleSave = async () => {
     setError('');
+
     if (!vehicle) return;
+
     if (!serviceType) {
       setError('Please select a service type');
       return;
     }
+
     const odoNum = parseFloat(odometer);
     if (isNaN(odoNum) || odoNum < 0) {
       setError('Enter a valid odometer reading');
       return;
     }
+
     const costNum = cost ? parseFloat(cost) : undefined;
     if (cost && (isNaN(costNum!) || costNum! < 0)) {
       setError('Enter a valid cost');
@@ -61,23 +69,32 @@ export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
     }
 
     setSaving(true);
-    await addService({
-      id: uuidv4(),
-      vehicleId,
-      serviceType,
-      odometer: odoNum,
-      date: new Date().toISOString(),
-      notes: notes.trim() || undefined,
-      cost: costNum,
-    });
-    setSaving(false);
-    navigation.goBack();
+
+    try {
+      await addService({
+        vehicleId,
+        serviceType,
+        odometer: odoNum,
+        date: new Date().toISOString(),
+        notes: notes.trim() || undefined,
+        cost: costNum,
+      });
+
+      navigation.goBack();
+    } catch (err) {
+      setError('Failed to save service record. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!vehicle) {
+  if (loadingVehicles || !vehicle) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>Loading...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.accent || '#FF6B35'} />
+          <Text style={styles.loadingText}>Loading vehicle details...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -94,12 +111,15 @@ export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
+
           <Text style={styles.title}>Log Service</Text>
+
           <View style={{ width: 60 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.sectionLabel}>SERVICE TYPE</Text>
+
           <View style={styles.serviceList}>
             {intervals.map((s) => (
               <TouchableOpacity
@@ -167,6 +187,16 @@ export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.md,
+    fontSize: theme.fontSize.md,
+  },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { Vehicle } from '../types';
+import { useVehicles } from '../hooks/useVehicles';
 import {
-  getVehiclesForUser,
   getServicesForVehicle,
   getAwaitingConfirmation,
 } from '../utils/storage';
@@ -27,49 +26,66 @@ import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-interface VehicleWithDue {
-  vehicle: Vehicle;
-  servicesDue: number;
-}
-
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { user, logout } = useAuth();
-  const [vehicles, setVehicles] = useState<VehicleWithDue[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const { vehicles, loading: loadingVehicles } = useVehicles();
+
+  const [servicesDueMap, setServicesDueMap] = useState<Record<string, number>>({});
   const [detectionActive, setDetectionActive] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadVehicles = useCallback(async () => {
-    if (!user) return;
-    const v = await getVehiclesForUser(user.id);
-    const withDue: VehicleWithDue[] = await Promise.all(
-      v.map(async (vehicle) => {
-        const services = await getServicesForVehicle(vehicle.id);
-        const statuses = calculateServiceStatuses(vehicle, services);
-        const due = statuses.filter(
-          (s) => s.status === 'overdue' || s.status === 'due-soon'
-        ).length;
-        return { vehicle, servicesDue: due };
+  const loadSecondaryData = useCallback(async () => {
+    const updatedMap: Record<string, number> = {};
+
+    await Promise.all(
+      vehicles.map(async (vehicle) => {
+        try {
+          const services = await getServicesForVehicle(vehicle.id);
+          const statuses = calculateServiceStatuses(vehicle, services);
+
+          const dueCount = statuses.filter(
+            (status) => status.status === 'overdue' || status.status === 'due-soon'
+          ).length;
+
+          updatedMap[vehicle.id] = dueCount;
+        } catch (err) {
+          console.error(`Failed to process service intervals for vehicle ${vehicle.id}:`, err);
+          updatedMap[vehicle.id] = 0;
+        }
       })
     );
-    setVehicles(withDue);
 
-    // Check passive detection
-    const active = await isPassiveDetectionActive();
-    setDetectionActive(active);
-    const pending = await getAwaitingConfirmation();
-    setPendingCount(pending.length);
-  }, [user]);
+    setServicesDueMap(updatedMap);
+
+    try {
+      const active = await isPassiveDetectionActive();
+      const pending = await getAwaitingConfirmation();
+
+      setDetectionActive(active);
+      setPendingCount(pending.length);
+    } catch (err) {
+      console.error('Error synchronizing background telemetry monitoring status:', err);
+    }
+  }, [vehicles]);
+
+  React.useEffect(() => {
+    if (vehicles.length > 0) {
+      loadSecondaryData();
+    } else {
+      setServicesDueMap({});
+    }
+  }, [vehicles, loadSecondaryData]);
 
   useFocusEffect(
     useCallback(() => {
-      loadVehicles();
-    }, [loadVehicles])
+      loadSecondaryData();
+    }, [loadSecondaryData])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadVehicles();
+    await loadSecondaryData();
     setRefreshing(false);
   };
 
@@ -80,17 +96,23 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     ]);
   };
 
+  const totalServicesDue = vehicles.reduce(
+    (sum, vehicle) => sum + (servicesDueMap[vehicle.id] || 0),
+    0
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
-            {user?.isGuest ? 'Welcome, Guest' : `Welcome back`}
+            {user?.isGuest ? 'Welcome, Guest' : 'Welcome back'}
           </Text>
           <Text style={styles.username}>
             {user?.isGuest ? 'Your data stays on this device' : user?.username}
           </Text>
         </View>
+
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>↗</Text>
         </TouchableOpacity>
@@ -100,7 +122,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={refreshing || (loadingVehicles && vehicles.length === 0)}
             onRefresh={onRefresh}
             tintColor={theme.colors.accent}
           />
@@ -111,20 +133,17 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.summaryNumber}>{vehicles.length}</Text>
             <Text style={styles.summaryLabel}>Vehicles</Text>
           </View>
+
           <View style={[styles.summaryCard, { marginLeft: theme.spacing.sm }]}>
             <Text style={[styles.summaryNumber, { color: theme.colors.warning }]}>
-              {vehicles.reduce((sum, v) => sum + v.servicesDue, 0)}
+              {totalServicesDue}
             </Text>
             <Text style={styles.summaryLabel}>Services Due</Text>
           </View>
         </View>
 
-        {/* Passive detection card */}
         <TouchableOpacity
-          style={[
-            styles.passiveCard,
-            detectionActive && styles.passiveCardActive,
-          ]}
+          style={[styles.passiveCard, detectionActive && styles.passiveCardActive]}
           onPress={() => navigation.navigate('PassiveDetection')}
           activeOpacity={0.85}
         >
@@ -141,17 +160,21 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <Text style={styles.passiveEmoji}>🛰️</Text>
             </View>
+
             <View style={{ flex: 1 }}>
               <Text style={styles.passiveTitle}>Auto-detect Trips</Text>
               <Text style={styles.passiveSubtitle}>
                 {pendingCount > 0
-                  ? `${pendingCount} trip${pendingCount > 1 ? 's' : ''} awaiting confirmation`
+                  ? `${pendingCount} trip${
+                      pendingCount > 1 ? 's' : ''
+                    } awaiting confirmation`
                   : detectionActive
                     ? 'Detection active in background'
                     : 'Tap to set up passive detection'}
               </Text>
             </View>
           </View>
+
           <View
             style={[
               styles.passiveStatus,
@@ -166,7 +189,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
         <Text style={styles.sectionTitle}>YOUR GARAGE</Text>
 
-        {vehicles.length === 0 ? (
+        {vehicles.length === 0 && !loadingVehicles ? (
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>🚗</Text>
             <Text style={styles.emptyTitle}>No vehicles yet</Text>
@@ -175,11 +198,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </View>
         ) : (
-          vehicles.map(({ vehicle, servicesDue }) => (
+          vehicles.map((vehicle) => (
             <VehicleCard
               key={vehicle.id}
               vehicle={vehicle}
-              servicesDue={servicesDue}
+              servicesDue={servicesDueMap[vehicle.id] || 0}
               onPress={() =>
                 navigation.navigate('VehicleDetail', { vehicleId: vehicle.id })
               }
