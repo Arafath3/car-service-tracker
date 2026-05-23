@@ -12,7 +12,8 @@
       "backgroundColor": "#0A0E1A"
     },
     "android": {
-      "package": "com.example.servicetracker",
+      "package": "com.arafath.servicetracker",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -24,8 +25,12 @@
         "android.permission.WAKE_LOCK"
       ]
     },
+    "ios": {
+      "bundleIdentifier": "com.arafath.servicetracker"
+    },
     "plugins": [
       "expo-router",
+      "@react-native-firebase/app",
       [
         "expo-location",
         {
@@ -40,6 +45,18 @@
         {
           "color": "#FF6B35"
         }
+      ],
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMultiDex": true
+          },
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
       ]
     ],
     "experiments": {
@@ -50,9 +67,6 @@
       "eas": {
         "projectId": "c4257008-7228-40e6-a8fb-ac1871d843eb"
       }
-    },
-    "ios": {
-      "bundleIdentifier": "com.example.servicetracker"
     }
   }
 }
