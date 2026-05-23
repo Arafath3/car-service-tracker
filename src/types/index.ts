@@ -111,3 +111,25 @@ export interface DetectionConfig {
   rollingWindowSize: number;
   roadCompensationFactor: number;
 }
+
+
+// Add this at the very bottom of your types file:
+
+export type RootStackParamList = {
+  Login: undefined;
+  Signup: undefined;
+  Home: undefined;
+  
+  // Modals
+  AddVehicle: undefined;
+  TrackTrip: undefined;
+  AddService: undefined;
+  ConfirmTrip: undefined;
+  
+  // Regular Screens
+  PassiveDetection: undefined;
+  
+  // This screen likely needs a vehicle ID or object passed to it.
+  // Adjust 'string' to whatever match your setup (e.g., vehicleId: string)
+  VehicleDetail: { vehicleId: string }; 
+};

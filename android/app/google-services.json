@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "735398182032",
+    "project_id": "car-service-tracker-7654b",
+    "storage_bucket": "car-service-tracker-7654b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:735398182032:android:4035dcd71430b207602c15",
+        "android_client_info": {
+          "package_name": "com.arafath.servicetracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9JPyCPKFfKC0Onc1dEughR5ykzX-G9w0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

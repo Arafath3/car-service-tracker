@@ -259,7 +259,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.servicetracker";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.arafath.servicetracker";
 				PRODUCT_NAME = "ServiceTracker";
 				SWIFT_OBJC_BRIDGING_HEADER = "ServiceTracker/ServiceTracker-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -288,7 +288,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.servicetracker";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.arafath.servicetracker";
 				PRODUCT_NAME = "ServiceTracker";
 				SWIFT_OBJC_BRIDGING_HEADER = "ServiceTracker/ServiceTracker-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

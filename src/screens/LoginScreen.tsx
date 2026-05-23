@@ -39,7 +39,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       'Your data will be stored only on this device and will not sync. You can sign up later to keep your data safe.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', onPress: () => loginAsGuest() },
+        { text: 'Continue', onPress: () => loginAsGuest() },   // edit this for better looking notification
       ]
     );
   };

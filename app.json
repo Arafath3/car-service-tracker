@@ -12,7 +12,8 @@
       "backgroundColor": "#0A0E1A"
     },
     "android": {
-      "package": "com.example.servicetracker",
+      "package": "com.arafath.servicetracker",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -52,7 +53,7 @@
       }
     },
     "ios": {
-      "bundleIdentifier": "com.example.servicetracker"
+      "bundleIdentifier": "com.arafath.servicetracker"
     }
   }
 }

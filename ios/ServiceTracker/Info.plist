@@ -28,7 +28,7 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>servicetracker</string>
-          <string>com.example.servicetracker</string>
+          <string>com.arafath.servicetracker</string>
         </array>
       </dict>
     </array>
