@@ -10,17 +10,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import auth from '@react-native-firebase/auth';
+
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
-import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
 import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
 
 export const SignupScreen: React.FC<Props> = ({ navigation }) => {
-  const { signup } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -28,14 +28,35 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSignup = async () => {
     setError('');
+
+    if (!email || !password || !confirm) {
+      setError('Please fill in all fields');
+      return;
+    }
+
     if (password !== confirm) {
       setError('Passwords do not match');
       return;
     }
+
     setLoading(true);
-    const result = await signup(username, password);
-    setLoading(false);
-    if (!result.success) setError(result.error || 'Signup failed');
+    try {
+      // Create user directly with native Firebase auth
+      await auth().createUserWithEmailAndPassword(email.trim(), password);
+      // Success! Firebase's root onAuthStateChanged listener handles navigation state
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use') {
+        setError('That email address is already in use.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('The email address format is invalid.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password must be at least 6 characters.');
+      } else {
+        setError(err.message || 'Signup failed');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -56,13 +77,13 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
 
             <Input
-              label="Username"
-              value={username}
-              onChangeText={setUsername}
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="Choose a username"
-              hint="At least 3 characters"
+              keyboardType="email-address"
+              placeholder="Enter your email"
             />
 
             <Input
@@ -71,7 +92,7 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
               onChangeText={setPassword}
               secureTextEntry
               placeholder="Choose a password"
-              hint="At least 4 characters"
+              hint="At least 6 characters"
             />
 
             <Input

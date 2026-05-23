@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
+import auth from '@react-native-firebase/auth';
+
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { useAuth } from '../context/AuthContext';
@@ -19,27 +23,94 @@ import { RootStackParamList } from '../types';
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
-  const { login, loginAsGuest } = useAuth();
-  const [username, setUsername] = useState('');
+  // Assuming your AuthContext will expose these Firebase hooks or handle them
+  const { loginAsGuest } = useAuth(); 
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
+  useEffect(() => {
+    GoogleSignin.configure({
+      // Get this from your webClientId in firebase console / google-services.json
+      webClientId: 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com', 
+      offlineAccess: true,
+    });
+  }, []);
+
+  // --- 1. Firebase Email & Password Sign In ---
   const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
     setError('');
     setLoading(true);
-    const result = await login(username, password);
-    setLoading(false);
-    if (!result.success) setError(result.error || 'Login failed');
+    try {
+      await auth().signInWithEmailAndPassword(email.trim(), password);
+      // Firebase's onAuthStateChanged listener in your app root will route them in automatically
+    } catch (err: any) {
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        setError('Invalid email or password.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('That email address is invalid.');
+      } else {
+        setError(err.message || 'Login failed');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- 2. Firebase Google Sign In ---
+const handleGoogleLogin = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      
+   
+      const response = await GoogleSignin.signIn();
+   
+      if (isSuccessResponse(response)) {
+
+        const idToken = response.data.idToken;
+        
+        if (!idToken) {
+           throw new Error('Google Sign-In succeeded, but no ID token was returned.');
+        }
+
+        const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+        
+        // Sign-in the user with the credential
+        await auth().signInWithCredential(googleCredential);
+      } else {
+        // The user cancelled the prompt or dismissed the bottom sheet
+        console.log('Sign in cancelled or no credential found', response);
+      }
+
+    } catch (err: any) {
+      if (err.code !== 'ASYNC_OP_IN_PROGRESS') {
+        setError('Google sign-in failed. Please try again.');
+        console.error(err);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   const handleGuest = () => {
     Alert.alert(
       'Continue as Guest',
-      'Your data will be stored only on this device and will not sync. You can sign up later to keep your data safe.',
+      'Your vehicles and service history will only live on this device. Sign up later to back up your data safely.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', onPress: () => loginAsGuest() },   // edit this for better looking notification
+        { 
+          text: 'Continue', 
+          style: 'default',
+          onPress: () => loginAsGuest() 
+        },
       ]
     );
   };
@@ -69,12 +140,13 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.subheading}>Sign in to track your vehicles</Text>
 
             <Input
-              label="Username"
-              value={username}
-              onChangeText={setUsername}
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="Enter username"
+              keyboardType="email-address"
+              placeholder="Enter your email"
             />
 
             <Input
@@ -82,7 +154,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              placeholder="Enter password"
+              placeholder="Enter your password"
             />
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -91,6 +163,19 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               title="Sign In"
               onPress={handleLogin}
               loading={loading}
+              disabled={googleLoading}
+              fullWidth
+              size="lg"
+              style={{ marginTop: theme.spacing.sm }}
+            />
+
+            {/* Custom styled Google Auth Button to match your theme layout */}
+            <Button
+              title="Sign In with Google"
+              onPress={handleGoogleLogin}
+              loading={googleLoading}
+              disabled={loading}
+              variant="secondary"
               fullWidth
               size="lg"
               style={{ marginTop: theme.spacing.sm }}
