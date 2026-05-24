@@ -50,10 +50,6 @@ export interface Trip {
   source?: 'manual' | 'passive';
 }
 
-// ============================================================================
-// PASSIVE DETECTION
-// ============================================================================
-
 export type DetectionState =
   | 'idle'
   | 'monitoring'
@@ -99,8 +95,6 @@ export interface DetectionContext {
   totalSnapshotsTaken: number;
 }
 
-// User-tunable thresholds for the detection engine.
-// Persisted to disk so demo settings survive app restarts.
 export interface DetectionConfig {
   drivingMinKmh: number;
   walkingMaxKmh: number;
@@ -111,3 +105,16 @@ export interface DetectionConfig {
   rollingWindowSize: number;
   roadCompensationFactor: number;
 }
+
+// THIS IS THE FIX — add RootStackParamList export
+export type RootStackParamList = {
+  Home: undefined;
+  Login: undefined;
+  Signup: undefined;
+  AddVehicle: undefined;
+  AddService: { vehicleId: string };
+  ConfirmTrip: { pendingTripId: string };
+  TrackTrip: { vehicleId: string };
+  VehicleDetail: { vehicleId: string };
+  PassiveDetection: undefined;
+};
