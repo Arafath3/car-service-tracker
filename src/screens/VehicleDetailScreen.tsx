@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
 import { LineChart, ProgressChart } from 'react-native-chart-kit';
 import { Vehicle, ServiceRecord, Trip, RootStackParamList } from '../types';
+import { useVehicles } from '../hooks/useVehicles';
 import {
-  getVehicles,
   getServicesForVehicle,
   getTripsForVehicle,
   deleteVehicle,
@@ -31,31 +30,43 @@ const screenWidth = Dimensions.get('window').width;
 
 export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { vehicleId } = route.params;
+  const { vehicles, loading: loadingVehicles } = useVehicles();
+
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [statuses, setStatuses] = useState<ServiceStatus[]>([]);
+  const [loadingContext, setLoadingContext] = useState(true);
 
-  const load = useCallback(async () => {
-    const all = await getVehicles();
-    const v = all.find((x) => x.id === vehicleId);
-    if (!v) {
+  useEffect(() => {
+    const target = vehicles.find((x) => x.id === vehicleId);
+
+    if (!target && !loadingVehicles) {
       navigation.goBack();
       return;
     }
-    setVehicle(v);
-    const s = await getServicesForVehicle(vehicleId);
-    setServices(s);
-    const t = await getTripsForVehicle(vehicleId);
-    setTrips(t);
-    setStatuses(calculateServiceStatuses(v, s));
-  }, [vehicleId, navigation]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+    if (target) {
+      setVehicle(target);
+
+      const fetchHistory = async () => {
+        try {
+          const serviceHistory = await getServicesForVehicle(vehicleId);
+          const tripHistory = await getTripsForVehicle(vehicleId);
+
+          setServices(serviceHistory);
+          setTrips(tripHistory);
+          setStatuses(calculateServiceStatuses(target, serviceHistory));
+        } catch (err) {
+          console.error('Error synchronizing local vehicle records:', err);
+        } finally {
+          setLoadingContext(false);
+        }
+      };
+
+      fetchHistory();
+    }
+  }, [vehicles, vehicleId, loadingVehicles, navigation]);
 
   const handleDelete = () => {
     Alert.alert('Delete Vehicle', 'This will remove all service and trip data. Are you sure?', [
@@ -64,31 +75,43 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await deleteVehicle(vehicleId);
-          navigation.goBack();
+          try {
+            await deleteVehicle(vehicleId);
+            navigation.goBack();
+          } catch (err) {
+            Alert.alert('Error', 'Failed to remove vehicle cleanly.');
+          }
         },
       },
     ]);
   };
 
-  if (!vehicle) {
+  if (loadingVehicles || (loadingContext && !vehicle)) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>Loading...</Text>
+        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>
+          Loading metrics...
+        </Text>
       </SafeAreaView>
     );
   }
 
-  // Compute stats
-  const totalDistance = vehicle.currentOdometer - vehicle.startingOdometer;
-  const totalTrips = trips.filter((t) => !t.isActive).length;
-  const totalServices = services.length;
-  const overdueCount = statuses.filter((s) => s.status === 'overdue').length;
-  const dueSoonCount = statuses.filter((s) => s.status === 'due-soon').length;
+  if (!vehicle) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={{ color: theme.colors.danger, padding: 20 }}>Vehicle not found.</Text>
+      </SafeAreaView>
+    );
+  }
 
-  // Mileage history chart - last 6 trips
+  const totalDistance = vehicle.currentOdometer - vehicle.startingOdometer;
+  const totalTrips = trips.filter((trip) => !trip.isActive).length;
+  const totalServices = services.length;
+  const overdueCount = statuses.filter((status) => status.status === 'overdue').length;
+  const dueSoonCount = statuses.filter((status) => status.status === 'due-soon').length;
+
   const recentTrips = [...trips]
-    .filter((t) => !t.isActive && t.endOdometer !== undefined)
+    .filter((trip) => !trip.isActive && trip.endOdometer !== undefined)
     .slice(0, 6)
     .reverse();
 
@@ -100,11 +123,17 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(255, 107, 53, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-    propsForBackgroundLines: { stroke: theme.colors.border, strokeDasharray: '4 4' },
-    propsForDots: { r: '5', strokeWidth: '2', stroke: theme.colors.accent },
+    propsForBackgroundLines: {
+      stroke: theme.colors.border,
+      strokeDasharray: '4 4',
+    },
+    propsForDots: {
+      r: '5',
+      strokeWidth: '2',
+      stroke: theme.colors.accent,
+    },
   };
 
-  // Progress data for service health
   const progressData = {
     labels: ['Health'],
     data: [
@@ -121,33 +150,31 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
+
         <TouchableOpacity onPress={handleDelete}>
           <Text style={styles.deleteText}>Delete</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Hero */}
         <View style={styles.hero}>
           <Text style={styles.heroEmoji}>{vehicle.type === 'car' ? '🚗' : '🏍️'}</Text>
+
           <Text style={styles.heroNickname}>
             {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
           </Text>
+
           <Text style={styles.heroSubtitle}>
             {vehicle.year} · {vehicle.make} {vehicle.model}
           </Text>
         </View>
 
-        {/* Big odometer */}
         <View style={styles.odometerCard}>
           <Text style={styles.odometerLabel}>CURRENT ODOMETER</Text>
-          <Text style={styles.odometerValue}>
-            {vehicle.currentOdometer.toLocaleString()}
-          </Text>
+          <Text style={styles.odometerValue}>{vehicle.currentOdometer.toLocaleString()}</Text>
           <Text style={styles.odometerUnit}>kilometers</Text>
         </View>
 
-        {/* Stat grid */}
         <View style={styles.statRow}>
           <StatTile
             label="Distance Driven"
@@ -155,12 +182,21 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             unit="km"
             accent={theme.colors.accent}
           />
+
           <View style={{ width: theme.spacing.sm }} />
+
           <StatTile label="Trips" value={String(totalTrips)} accent={theme.colors.info} />
         </View>
+
         <View style={[styles.statRow, { marginTop: theme.spacing.sm }]}>
-          <StatTile label="Services Logged" value={String(totalServices)} accent={theme.colors.success} />
+          <StatTile
+            label="Services Logged"
+            value={String(totalServices)}
+            accent={theme.colors.success}
+          />
+
           <View style={{ width: theme.spacing.sm }} />
+
           <StatTile
             label="Services Due"
             value={String(overdueCount + dueSoonCount)}
@@ -168,7 +204,6 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           />
         </View>
 
-        {/* Action buttons */}
         <View style={styles.actionRow}>
           <Button
             title="🛰  Track Trip"
@@ -177,6 +212,7 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             size="lg"
           />
         </View>
+
         <View style={styles.actionRow}>
           <Button
             title="+ Log Service"
@@ -187,16 +223,16 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           />
         </View>
 
-        {/* Mileage chart */}
         <Text style={styles.sectionTitle}>MILEAGE OVER TIME</Text>
+
         {hasChartData ? (
           <View style={styles.chartCard}>
             <LineChart
               data={{
-                labels: recentTrips.map((_, i) => `T${i + 1}`),
+                labels: recentTrips.map((_, index) => `T${index + 1}`),
                 datasets: [
                   {
-                    data: recentTrips.map((t) => t.endOdometer || 0),
+                    data: recentTrips.map((trip) => trip.endOdometer || 0),
                     strokeWidth: 3,
                   },
                 ],
@@ -209,9 +245,8 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               withInnerLines
               withOuterLines={false}
             />
-            <Text style={styles.chartCaption}>
-              Odometer reading after each tracked trip
-            </Text>
+
+            <Text style={styles.chartCaption}>Odometer reading after each tracked trip</Text>
           </View>
         ) : (
           <View style={styles.emptyChart}>
@@ -221,8 +256,8 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Service health */}
         <Text style={styles.sectionTitle}>SERVICE HEALTH</Text>
+
         <View style={styles.healthRow}>
           <View style={styles.progressWrap}>
             <ProgressChart
@@ -244,57 +279,65 @@ export const VehicleDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               }}
               hideLegend
             />
+
             <View style={styles.progressCenter} pointerEvents="none">
               <Text style={styles.progressPercent}>
                 {Math.round(progressData.data[0] * 100)}%
               </Text>
             </View>
           </View>
+
           <View style={styles.healthInfo}>
             <View style={styles.healthRowItem}>
               <View style={[styles.healthDot, { backgroundColor: theme.colors.danger }]} />
               <Text style={styles.healthLabel}>Overdue</Text>
               <Text style={styles.healthValue}>{overdueCount}</Text>
             </View>
+
             <View style={styles.healthRowItem}>
               <View style={[styles.healthDot, { backgroundColor: theme.colors.warning }]} />
               <Text style={styles.healthLabel}>Due Soon</Text>
               <Text style={styles.healthValue}>{dueSoonCount}</Text>
             </View>
+
             <View style={styles.healthRowItem}>
               <View style={[styles.healthDot, { backgroundColor: theme.colors.success }]} />
               <Text style={styles.healthLabel}>OK</Text>
               <Text style={styles.healthValue}>
-                {statuses.filter((s) => s.status === 'ok').length}
+                {statuses.filter((status) => status.status === 'ok').length}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Service list */}
         <Text style={styles.sectionTitle}>SCHEDULED SERVICES</Text>
-        {statuses.map((s) => (
-          <ServiceStatusCard key={s.serviceType} status={s} />
+
+        {statuses.map((status) => (
+          <ServiceStatusCard key={status.serviceType} status={status} />
         ))}
 
-        {/* Service history */}
         {services.length > 0 && (
           <>
             <Text style={[styles.sectionTitle, { marginTop: theme.spacing.xl }]}>
               SERVICE HISTORY
             </Text>
-            {services.slice(0, 5).map((s) => (
-              <View key={s.id} style={styles.historyCard}>
+
+            {services.slice(0, 5).map((service) => (
+              <View key={service.id} style={styles.historyCard}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.historyType}>{s.serviceType}</Text>
+                  <Text style={styles.historyType}>{service.serviceType}</Text>
                   <Text style={styles.historyDate}>
-                    {new Date(s.date).toLocaleDateString()} ·{' '}
-                    {s.odometer.toLocaleString()} km
+                    {new Date(service.date).toLocaleDateString()} ·{' '}
+                    {service.odometer.toLocaleString()} km
                   </Text>
-                  {s.notes ? <Text style={styles.historyNotes}>{s.notes}</Text> : null}
+
+                  {service.notes ? (
+                    <Text style={styles.historyNotes}>{service.notes}</Text>
+                  ) : null}
                 </View>
-                {s.cost ? (
-                  <Text style={styles.historyCost}>${s.cost.toFixed(0)}</Text>
+
+                {service.cost ? (
+                  <Text style={styles.historyCost}>${service.cost.toFixed(0)}</Text>
                 ) : null}
               </View>
             ))}

@@ -50,10 +50,6 @@ export interface Trip {
   source?: 'manual' | 'passive';
 }
 
-// ============================================================================
-// PASSIVE DETECTION
-// ============================================================================
-
 export type DetectionState =
   | 'idle'
   | 'monitoring'
@@ -99,8 +95,6 @@ export interface DetectionContext {
   totalSnapshotsTaken: number;
 }
 
-// User-tunable thresholds for the detection engine.
-// Persisted to disk so demo settings survive app restarts.
 export interface DetectionConfig {
   drivingMinKmh: number;
   walkingMaxKmh: number;
@@ -112,24 +106,15 @@ export interface DetectionConfig {
   roadCompensationFactor: number;
 }
 
-
-// Add this at the very bottom of your types file:
-
+// THIS IS THE FIX — add RootStackParamList export
 export type RootStackParamList = {
+  Home: undefined;
   Login: undefined;
   Signup: undefined;
-  Home: undefined;
-  
-  // Modals
   AddVehicle: undefined;
-  TrackTrip: undefined;
-  AddService: undefined;
-  ConfirmTrip: undefined;
-  
-  // Regular Screens
+  AddService: { vehicleId: string };
+  ConfirmTrip: { pendingTripId: string };
+  TrackTrip: { vehicleId: string };
+  VehicleDetail: { vehicleId: string };
   PassiveDetection: undefined;
-  
-  // This screen likely needs a vehicle ID or object passed to it.
-  // Adjust 'string' to whatever match your setup (e.g., vehicleId: string)
-  VehicleDetail: { vehicleId: string }; 
 };

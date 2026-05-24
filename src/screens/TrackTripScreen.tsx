@@ -13,36 +13,37 @@ import * as Location from 'expo-location';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Vehicle, Trip, RootStackParamList } from '../types';
-import {
-  getVehicles,
-  updateVehicle,
-  addTrip,
-} from '../utils/storage';
+import { useVehicles } from '../hooks/useVehicles';
+import { addTrip, updateVehicle } from '../utils/storage';
 import { Button } from '../components/Button';
 import { theme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TrackTrip'>;
 
-// Haversine distance formula - returns km between two GPS points
 const haversineKm = (
   lat1: number,
   lon1: number,
   lat2: number,
   lon2: number
 ): number => {
-  const R = 6371; // Earth radius in km
+  const R = 6371;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
+
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
   return R * c;
 };
 
 export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
   const { vehicleId } = route.params;
+  const { vehicles, loading: loadingVehicles } = useVehicles();
+
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [tracking, setTracking] = useState(false);
   const [distanceKm, setDistanceKm] = useState(0);
@@ -58,17 +59,24 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
   const tripIdRef = useRef<string>('');
 
   useEffect(() => {
-    (async () => {
-      const all = await getVehicles();
-      const v = all.find((x) => x.id === vehicleId);
-      if (v) setVehicle(v);
-    })();
+    const target = vehicles.find((x) => x.id === vehicleId);
+
+    if (target) {
+      setVehicle(target);
+    }
+  }, [vehicles, vehicleId]);
+
+  useEffect(() => {
     return () => {
-      // Cleanup on unmount
-      if (watchSubscription.current) watchSubscription.current.remove();
-      if (elapsedInterval.current) clearInterval(elapsedInterval.current);
+      if (watchSubscription.current) {
+        watchSubscription.current.remove();
+      }
+
+      if (elapsedInterval.current) {
+        clearInterval(elapsedInterval.current);
+      }
     };
-  }, [vehicleId]);
+  }, []);
 
   const requestPermission = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -78,14 +86,16 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const startTracking = async () => {
     setError('');
+
     const granted = await requestPermission();
+
     if (!granted) {
       setError('Location permission denied. Cannot track trip.');
       return;
     }
+
     if (!vehicle) return;
 
-    // Reset state
     setDistanceKm(0);
     setElapsedSec(0);
     setCurrentSpeed(0);
@@ -93,44 +103,44 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
     startTime.current = new Date();
     tripIdRef.current = uuidv4();
 
-    // Start elapsed timer
     elapsedInterval.current = setInterval(() => {
       if (startTime.current) {
-        const sec = Math.floor((Date.now() - startTime.current.getTime()) / 1000);
-        setElapsedSec(sec);
+        const seconds = Math.floor((Date.now() - startTime.current.getTime()) / 1000);
+        setElapsedSec(seconds);
       }
     }, 1000);
 
-    // Start GPS watch
     try {
       watchSubscription.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          distanceInterval: 5, // update every 5 meters
-          timeInterval: 2000, // or every 2 seconds
+          distanceInterval: 5,
+          timeInterval: 2000,
         },
-        (loc) => {
+        (location) => {
           if (lastLocation.current) {
             const km = haversineKm(
               lastLocation.current.coords.latitude,
               lastLocation.current.coords.longitude,
-              loc.coords.latitude,
-              loc.coords.longitude
+              location.coords.latitude,
+              location.coords.longitude
             );
-            // ignore tiny GPS jitter
+
             if (km > 0.003) {
               setDistanceKm((prev) => prev + km);
             }
           }
-          lastLocation.current = loc;
-          // speed in m/s -> km/h
-          const speedKmh = (loc.coords.speed || 0) * 3.6;
+
+          lastLocation.current = location;
+
+          const speedKmh = (location.coords.speed || 0) * 3.6;
           setCurrentSpeed(Math.max(0, speedKmh));
         }
       );
+
       setTracking(true);
-    } catch (e: any) {
-      setError('Failed to start GPS: ' + (e?.message || 'unknown error'));
+    } catch (err: any) {
+      setError(`Failed to start GPS engine: ${err?.message || 'unknown error'}`);
     }
   };
 
@@ -139,14 +149,16 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
       watchSubscription.current.remove();
       watchSubscription.current = null;
     }
+
     if (elapsedInterval.current) {
       clearInterval(elapsedInterval.current);
       elapsedInterval.current = null;
     }
+
     setTracking(false);
 
     if (!vehicle || !startTime.current || distanceKm < 0.01) {
-      Alert.alert('Trip too short', 'No distance recorded. Trip discarded.');
+      Alert.alert('Trip too short', 'No meaningful distance recorded. Trip discarded.');
       navigation.goBack();
       return;
     }
@@ -154,44 +166,62 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
     const finalDistance = parseFloat(distanceKm.toFixed(2));
     const newOdometer = vehicle.currentOdometer + finalDistance;
 
-    // Save the trip
-    const trip: Trip = {
-      id: tripIdRef.current,
-      vehicleId: vehicle.id,
-      startTime: startTime.current.toISOString(),
-      endTime: new Date().toISOString(),
-      distanceKm: finalDistance,
-      startOdometer: vehicle.currentOdometer,
-      endOdometer: newOdometer,
-      isActive: false,
-    };
-    await addTrip(trip);
+    try {
+      const trip: Trip = {
+        id: tripIdRef.current,
+        vehicleId: vehicle.id,
+        startTime: startTime.current.toISOString(),
+        endTime: new Date().toISOString(),
+        distanceKm: finalDistance,
+        startOdometer: vehicle.currentOdometer,
+        endOdometer: newOdometer,
+        isActive: false,
+      };
 
-    // Update vehicle odometer
-    const updated: Vehicle = { ...vehicle, currentOdometer: newOdometer };
-    await updateVehicle(updated);
+      await addTrip(trip);
+      await updateVehicle(vehicle.id, { currentOdometer: newOdometer });
 
-    Alert.alert(
-      'Trip Saved',
-      `Distance: ${finalDistance.toFixed(2)} km\nNew odometer: ${newOdometer.toLocaleString()} km`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
+      Alert.alert(
+        'Trip Saved',
+        `Distance: ${finalDistance.toFixed(2)} km\nNew odometer: ${newOdometer.toLocaleString()} km`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (err) {
+      console.error('Failed to commit trip log entries safely:', err);
+      Alert.alert('Error', 'Could not sync trip changes.');
+    }
   };
 
   const formatTime = (sec: number): string => {
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
+
     if (h > 0) {
-      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      return `${h}:${m.toString().padStart(2, '0')}:${s
+        .toString()
+        .padStart(2, '0')}`;
     }
+
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
+
+  if (!vehicle && loadingVehicles) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>
+          Loading garage parameters...
+        </Text>
+      </SafeAreaView>
+    );
+  }
 
   if (!vehicle) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>Loading...</Text>
+        <Text style={{ color: theme.colors.danger, padding: 20 }}>
+          Vehicle context not found.
+        </Text>
       </SafeAreaView>
     );
   }
@@ -202,17 +232,20 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
         <TouchableOpacity
           onPress={() => {
             if (tracking) {
-              Alert.alert('Trip in progress', 'Stop tracking before leaving', [
+              Alert.alert('Trip in progress', 'Please stop tracking before leaving this panel.', [
                 { text: 'OK' },
               ]);
               return;
             }
+
             navigation.goBack();
           }}
         >
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
+
         <Text style={styles.title}>Track Trip</Text>
+
         <View style={{ width: 60 }} />
       </View>
 
@@ -221,7 +254,6 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
           {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
         </Text>
 
-        {/* Big distance display */}
         <View style={styles.distanceCard}>
           <Text style={styles.distanceLabel}>DISTANCE</Text>
           <Text style={styles.distanceValue}>{distanceKm.toFixed(2)}</Text>
@@ -235,13 +267,13 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
           )}
         </View>
 
-        {/* Stats */}
         <View style={styles.statRow}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>SPEED</Text>
             <Text style={styles.statValue}>{currentSpeed.toFixed(0)}</Text>
             <Text style={styles.statUnit}>km/h</Text>
           </View>
+
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>TIME</Text>
             <Text style={styles.statValue}>{formatTime(elapsedSec)}</Text>
@@ -252,10 +284,9 @@ export const TrackTripScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.odoCard}>
           <View style={styles.odoRow}>
             <Text style={styles.odoLabel}>Starting odometer</Text>
-            <Text style={styles.odoValue}>
-              {vehicle.currentOdometer.toLocaleString()} km
-            </Text>
+            <Text style={styles.odoValue}>{vehicle.currentOdometer.toLocaleString()} km</Text>
           </View>
+
           <View style={styles.odoRow}>
             <Text style={styles.odoLabel}>Estimated new odometer</Text>
             <Text style={[styles.odoValue, { color: theme.colors.accent }]}>

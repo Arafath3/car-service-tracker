@@ -9,15 +9,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
-import { Vehicle, PendingTrip, Trip, RootStackParamList } from '../types';
+import { Vehicle, PendingTrip, RootStackParamList } from '../types';
+import { useVehicles } from '../hooks/useVehicles';
 import {
   getPendingTripById,
-  getVehicles,
   removePendingTrip,
-  addTrip,
-  updateVehicle,
+  logTripDistance,
   saveDetectionContext,
   getDetectionContext,
 } from '../utils/storage';
@@ -28,84 +25,117 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ConfirmTrip'>;
 
 export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
   const { pendingTripId } = route.params;
+  const { vehicles, loading: loadingVehicles } = useVehicles();
+
   const [trip, setTrip] = useState<PendingTrip | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingTrip, setLoadingTrip] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const t = await getPendingTripById(pendingTripId);
-      if (!t) {
-        Alert.alert('Not Found', 'This trip could not be found. It may have been already confirmed.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-        return;
+    let isMounted = true;
+
+    const fetchPendingTrip = async () => {
+      try {
+        const pendingTrip = await getPendingTripById(pendingTripId);
+
+        if (!isMounted) return;
+
+        if (!pendingTrip) {
+          Alert.alert(
+            'Not Found',
+            'This trip could not be found. It may have been already confirmed.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
+
+        setTrip(pendingTrip);
+      } catch (err) {
+        console.error('Error fetching pending trip data:', err);
+        Alert.alert('Error', 'Failed to retrieve trip verification records.');
+      } finally {
+        if (isMounted) {
+          setLoadingTrip(false);
+        }
       }
-      setTrip(t);
-      const all = await getVehicles();
-      const v = all.find((x) => x.id === t.vehicleId);
-      if (v) setVehicle(v);
-      setLoading(false);
-    })();
-  }, [pendingTripId]);
+    };
+
+    fetchPendingTrip();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [pendingTripId, navigation]);
+
+  useEffect(() => {
+    if (!loadingVehicles && trip && vehicles.length > 0) {
+      const foundVehicle = vehicles.find((x) => x.id === trip.vehicleId);
+
+      if (foundVehicle) {
+        setVehicle(foundVehicle);
+      }
+    }
+  }, [vehicles, trip, loadingVehicles]);
 
   const resetDetectionContext = async () => {
-    const ctx = await getDetectionContext();
-    if (ctx) {
-      await saveDetectionContext({
-        ...ctx,
-        state: ctx.enabled ? 'monitoring' : 'idle',
-        currentTripStartTime: null,
-        currentTripStartIndex: null,
-        accumulatedDistanceKm: 0,
-        stoppedSinceTimestamp: null,
-        recentSnapshots: [],
-        lastStateChangeAt: Date.now(),
-      });
+    try {
+      const ctx = await getDetectionContext();
+
+      if (ctx) {
+        await saveDetectionContext({
+          ...ctx,
+          state: ctx.enabled ? 'monitoring' : 'idle',
+          currentTripStartTime: null,
+          currentTripStartIndex: null,
+          accumulatedDistanceKm: 0,
+          stoppedSinceTimestamp: null,
+          recentSnapshots: [],
+          lastStateChangeAt: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to reset localized monitoring loop context:', err);
     }
   };
 
   const handleConfirm = async () => {
     if (!trip || !vehicle) return;
+
     setBusy(true);
 
-    // Save trip
-    const newTrip: Trip = {
-      id: uuidv4(),
-      vehicleId: trip.vehicleId,
-      startTime: new Date(trip.startTime).toISOString(),
-      endTime: new Date(trip.endTime).toISOString(),
-      distanceKm: trip.distanceKm,
-      startOdometer: vehicle.currentOdometer,
-      endOdometer: vehicle.currentOdometer + trip.distanceKm,
-      isActive: false,
-      source: 'passive',
-    };
-    await addTrip(newTrip);
+    try {
+      await logTripDistance(trip.vehicleId, trip.distanceKm);
+      await removePendingTrip(trip.id);
+      await resetDetectionContext();
 
-    // Update vehicle odometer
-    await updateVehicle({
-      ...vehicle,
-      currentOdometer: vehicle.currentOdometer + trip.distanceKm,
-    });
+      const calculatedNewOdometer = vehicle.currentOdometer + trip.distanceKm;
 
-    // Remove pending trip
-    await removePendingTrip(trip.id);
+      Alert.alert(
+        'Trip Saved',
+        `${trip.distanceKm.toFixed(2)} km added to ${
+          vehicle.nickname || vehicle.make
+        }. New odometer: ${calculatedNewOdometer.toLocaleString(undefined, {
+          maximumFractionDigits: 1,
+        })} km`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (err: any) {
+      console.error('Critical failure execution thread inside ConfirmTrip handleConfirm:', err);
 
-    // Reset detection context to monitoring
-    await resetDetectionContext();
-
-    setBusy(false);
-    Alert.alert(
-      'Trip Saved',
-      `${trip.distanceKm.toFixed(2)} km added to ${vehicle.nickname || vehicle.make}. New odometer: ${(vehicle.currentOdometer + trip.distanceKm).toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
+      Alert.alert(
+        'Submission Error',
+        err?.message ||
+          'Could not verify database synchronization. Please verify connectivity and try again.'
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleReject = async () => {
     if (!trip) return;
+
     Alert.alert('Discard Trip', 'This trip will be permanently deleted. Continue?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -113,19 +143,31 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
         style: 'destructive',
         onPress: async () => {
           setBusy(true);
-          await removePendingTrip(trip.id);
-          await resetDetectionContext();
-          setBusy(false);
-          navigation.goBack();
+
+          try {
+            await removePendingTrip(trip.id);
+            await resetDetectionContext();
+            navigation.goBack();
+          } catch (err) {
+            console.error('Error rejecting pending background trace profile:', err);
+            Alert.alert('Error', 'Failed to purge selection records safely.');
+          } finally {
+            setBusy(false);
+          }
         },
       },
     ]);
   };
 
-  if (loading) {
+  const combinedLoading = loadingTrip || loadingVehicles;
+
+  if (combinedLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={theme.colors.accent} size="large" />
+        <View style={styles.centeredContainer}>
+          <ActivityIndicator color={theme.colors.accent} size="large" />
+          <Text style={styles.loadingText}>Processing telemetry data...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -134,7 +176,7 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
     return (
       <SafeAreaView style={styles.container}>
         <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>
-          Trip not found.
+          Trip or associated vehicle profiles could not be identified.
         </Text>
       </SafeAreaView>
     );
@@ -146,9 +188,9 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.headerEmoji}>🚗</Text>
+          <Text style={styles.headerEmoji}>{vehicle.type === 'motorbike' ? '🏍️' : '🚗'}</Text>
           <Text style={styles.title}>Trip detected</Text>
           <Text style={styles.subtitle}>Was this a real drive?</Text>
         </View>
@@ -166,31 +208,41 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
               {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
             </Text>
           </View>
+
           <View style={styles.divider} />
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Started</Text>
             <Text style={styles.detailValue}>
               {startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
+
           <View style={styles.divider} />
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Ended</Text>
             <Text style={styles.detailValue}>
               {endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
+
           <View style={styles.divider} />
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Duration</Text>
             <Text style={styles.detailValue}>{durationMin} min</Text>
           </View>
+
           <View style={styles.divider} />
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Average Speed</Text>
             <Text style={styles.detailValue}>{trip.averageSpeedKmh.toFixed(1)} km/h</Text>
           </View>
+
           <View style={styles.divider} />
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Max Speed</Text>
             <Text style={styles.detailValue}>{trip.maxSpeedKmh.toFixed(1)} km/h</Text>
@@ -200,10 +252,9 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.odoCard}>
           <View style={styles.odoRow}>
             <Text style={styles.odoLabel}>Current odometer</Text>
-            <Text style={styles.odoValue}>
-              {vehicle.currentOdometer.toLocaleString()} km
-            </Text>
+            <Text style={styles.odoValue}>{vehicle.currentOdometer.toLocaleString()} km</Text>
           </View>
+
           <View style={styles.odoRow}>
             <Text style={styles.odoLabel}>If confirmed</Text>
             <Text style={[styles.odoValue, { color: theme.colors.accent }]}>
@@ -231,10 +282,12 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
           fullWidth
           size="lg"
           style={{ marginTop: theme.spacing.sm }}
+          disabled={busy}
         />
 
         <Text style={styles.footnote}>
-          The estimate uses a 1.15× compensation factor for typical road curvature. You can manually adjust the odometer afterwards if needed.
+          The estimate uses a 1.15× compensation factor for typical road curvature. You can
+          manually adjust the odometer afterwards if needed.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -243,6 +296,16 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
+  centeredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.md,
+    fontSize: theme.fontSize.md,
+  },
   scroll: { padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
   header: {
     alignItems: 'center',

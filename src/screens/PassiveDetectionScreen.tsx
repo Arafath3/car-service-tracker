@@ -12,10 +12,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Vehicle, RootStackParamList, DetectionState, PendingTrip } from '../types';
+import { RootStackParamList, DetectionState, PendingTrip } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useVehicles } from '../hooks/useVehicles';
 import {
-  getVehiclesForUser,
   getDetectionContext,
   getStateLog,
   StateLogEntry,
@@ -27,7 +27,6 @@ import {
   stopPassiveDetection,
   isPassiveDetectionActive,
 } from '../utils/passiveDetectionService';
-import { Button } from '../components/Button';
 import { theme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PassiveDetection'>;
@@ -64,7 +63,8 @@ const STATE_DESCRIPTIONS: Record<DetectionState, string> = {
 
 export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const { vehicles, loading: loadingVehicles } = useVehicles();
+
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [state, setState] = useState<DetectionState>('idle');
@@ -76,81 +76,107 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadTelemetryMetrics = useCallback(async () => {
     if (!user) return;
-    const v = await getVehiclesForUser(user.id);
-    setVehicles(v);
 
-    const ctx = await getDetectionContext();
-    const active = await isPassiveDetectionActive();
-    setEnabled(active);
-    if (ctx) {
-      setState(ctx.state);
-      setSnapshotCount(ctx.totalSnapshotsTaken);
-      setAccumulatedKm(ctx.accumulatedDistanceKm);
-      if (ctx.selectedVehicleId) setSelectedVehicleId(ctx.selectedVehicleId);
-    } else {
-      setState('idle');
+    try {
+      const ctx = await getDetectionContext();
+      const active = await isPassiveDetectionActive();
+
+      setEnabled(active);
+
+      if (ctx) {
+        setState(ctx.state);
+        setSnapshotCount(ctx.totalSnapshotsTaken);
+        setAccumulatedKm(ctx.accumulatedDistanceKm);
+
+        if (ctx.selectedVehicleId) {
+          setSelectedVehicleId(ctx.selectedVehicleId);
+        }
+      } else {
+        setState('idle');
+      }
+
+      const log = await getStateLog();
+      setStateLog([...log].reverse());
+
+      const pendingTrips = await getAwaitingConfirmation();
+      setPending(pendingTrips);
+    } catch (err) {
+      console.error('Failed to sync passive logging parameters:', err);
     }
-
-    const log = await getStateLog();
-    setStateLog(log.reverse()); // newest first
-
-    const p = await getAwaitingConfirmation();
-    setPending(p);
   }, [user]);
+
+  useEffect(() => {
+    if (!selectedVehicleId && vehicles.length > 0 && !enabled) {
+      setSelectedVehicleId(vehicles[0].id);
+    }
+  }, [vehicles, selectedVehicleId, enabled]);
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-      // Poll every 3 seconds while screen is focused so user can see live updates
-      const interval = setInterval(loadData, 3000);
+      loadTelemetryMetrics();
+
+      const interval = setInterval(loadTelemetryMetrics, 3000);
+
       return () => clearInterval(interval);
-    }, [loadData])
+    }, [loadTelemetryMetrics])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await loadTelemetryMetrics();
     setRefreshing(false);
   };
 
   const handleToggle = async (next: boolean) => {
     if (busy) return;
+
     setBusy(true);
-    if (next) {
-      if (!selectedVehicleId) {
-        Alert.alert('Select a vehicle', 'Please select which vehicle to track first.');
-        setBusy(false);
-        return;
+
+    try {
+      if (next) {
+        if (!selectedVehicleId) {
+          Alert.alert('Select a vehicle', 'Please select which vehicle to track first.');
+          return;
+        }
+
+        const result = await startPassiveDetection(selectedVehicleId);
+
+        if (!result.success) {
+          Alert.alert('Could not start detection', result.error || 'Unknown error');
+          return;
+        }
+
+        setEnabled(true);
+
+        Alert.alert(
+          'Detection Active',
+          'The app will monitor for driving in the background. You can close the app — a notification will appear when a trip is detected.'
+        );
+      } else {
+        await stopPassiveDetection();
+        setEnabled(false);
       }
-      const result = await startPassiveDetection(selectedVehicleId);
-      if (!result.success) {
-        Alert.alert('Could not start detection', result.error || 'Unknown error');
-        setBusy(false);
-        return;
-      }
-      setEnabled(true);
-      Alert.alert(
-        'Detection Active',
-        'The app will monitor for driving in the background. You can close the app — a notification will appear when a trip is detected.'
-      );
-    } else {
-      await stopPassiveDetection();
-      setEnabled(false);
+
+      await loadTelemetryMetrics();
+    } finally {
+      setBusy(false);
     }
-    await loadData();
-    setBusy(false);
   };
 
   const handleClearLog = async () => {
     await clearStateLog();
-    await loadData();
+    await loadTelemetryMetrics();
   };
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+
+    return `${d.getHours().toString().padStart(2, '0')}:${d
+      .getMinutes()
+      .toString()
+      .padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
   };
 
   return (
@@ -159,17 +185,22 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
+
         <Text style={styles.title}>Passive Detection</Text>
+
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.accent}
+          />
         }
       >
-        {/* Pending trips banner */}
         {pending.length > 0 && (
           <TouchableOpacity
             style={styles.pendingBanner}
@@ -179,27 +210,28 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
             activeOpacity={0.85}
           >
             <View style={styles.pendingDot} />
+
             <View style={{ flex: 1 }}>
               <Text style={styles.pendingTitle}>
                 {pending.length} trip{pending.length > 1 ? 's' : ''} awaiting confirmation
               </Text>
-              <Text style={styles.pendingSubtitle}>
-                Tap to review and confirm
-              </Text>
+              <Text style={styles.pendingSubtitle}>Tap to review and confirm</Text>
             </View>
+
             <Text style={styles.pendingArrow}>→</Text>
           </TouchableOpacity>
         )}
 
-        {/* State display */}
         <View style={styles.stateCard}>
           <Text style={styles.stateLabel}>CURRENT STATE</Text>
+
           <View style={styles.stateRow}>
             <View style={[styles.stateDot, { backgroundColor: STATE_COLORS[state] }]} />
             <Text style={[styles.stateValue, { color: STATE_COLORS[state] }]}>
               {STATE_LABELS[state]}
             </Text>
           </View>
+
           <Text style={styles.stateDescription}>{STATE_DESCRIPTIONS[state]}</Text>
 
           <View style={styles.statsRow}>
@@ -207,45 +239,51 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.statLabel}>SNAPSHOTS</Text>
               <Text style={styles.statValue}>{snapshotCount}</Text>
             </View>
+
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>TRIP DISTANCE</Text>
-              <Text style={styles.statValue}>{accumulatedKm.toFixed(2)}<Text style={styles.statUnit}> km</Text></Text>
+              <Text style={styles.statValue}>
+                {accumulatedKm.toFixed(2)}
+                <Text style={styles.statUnit}> km</Text>
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Vehicle selection */}
         <Text style={styles.sectionTitle}>VEHICLE TO TRACK</Text>
-        {vehicles.length === 0 ? (
-          <Text style={styles.emptyText}>
-            Add a vehicle first from the home screen.
-          </Text>
+
+        {vehicles.length === 0 && !loadingVehicles ? (
+          <Text style={styles.emptyText}>Add a vehicle first from the home screen.</Text>
         ) : (
           <View>
-            {vehicles.map((v) => (
+            {vehicles.map((vehicle) => (
               <TouchableOpacity
-                key={v.id}
+                key={vehicle.id}
                 style={[
                   styles.vehicleItem,
-                  selectedVehicleId === v.id && styles.vehicleItemActive,
+                  selectedVehicleId === vehicle.id && styles.vehicleItemActive,
                 ]}
-                onPress={() => !enabled && setSelectedVehicleId(v.id)}
+                onPress={() => !enabled && setSelectedVehicleId(vehicle.id)}
                 activeOpacity={enabled ? 1 : 0.85}
                 disabled={enabled}
               >
-                <Text style={styles.vehicleEmoji}>{v.type === 'car' ? '🚗' : '🏍️'}</Text>
+                <Text style={styles.vehicleEmoji}>
+                  {vehicle.type === 'car' ? '🚗' : '🏍️'}
+                </Text>
+
                 <View style={{ flex: 1 }}>
                   <Text style={styles.vehicleName}>
-                    {v.nickname || `${v.make} ${v.model}`}
+                    {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
                   </Text>
                   <Text style={styles.vehicleSub}>
-                    {v.year} · {v.currentOdometer.toLocaleString()} km
+                    {vehicle.year} · {vehicle.currentOdometer.toLocaleString()} km
                   </Text>
                 </View>
+
                 <View
                   style={[
                     styles.radio,
-                    selectedVehicleId === v.id && styles.radioActive,
+                    selectedVehicleId === vehicle.id && styles.radioActive,
                   ]}
                 />
               </TouchableOpacity>
@@ -253,7 +291,6 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Toggle */}
         <View style={styles.toggleCard}>
           <View style={{ flex: 1, marginRight: theme.spacing.md }}>
             <Text style={styles.toggleTitle}>Background Detection</Text>
@@ -263,6 +300,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
                 : 'Disabled — toggle on to start monitoring'}
             </Text>
           </View>
+
           <Switch
             value={enabled}
             onValueChange={handleToggle}
@@ -272,7 +310,6 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
           />
         </View>
 
-        {/* Debug toggle */}
         <TouchableOpacity
           style={styles.debugToggleRow}
           onPress={() => setShowDebug(!showDebug)}
@@ -289,6 +326,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.debugHeaderText}>
                 Most recent state transitions (newest first)
               </Text>
+
               {stateLog.length > 0 && (
                 <TouchableOpacity onPress={handleClearLog}>
                   <Text style={styles.debugClear}>Clear</Text>
@@ -298,23 +336,31 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
 
             {stateLog.length === 0 ? (
               <Text style={styles.debugEmpty}>
-                No events yet. Toggle detection on and move around to see the state machine in action.
+                No events yet. Toggle detection on and move around to see the state
+                machine in action.
               </Text>
             ) : (
               stateLog.slice(0, 20).map((entry, idx) => (
-                <View key={idx} style={styles.logEntry}>
+                <View key={`${entry.timestamp}-${idx}`} style={styles.logEntry}>
                   <View style={styles.logHeader}>
                     <Text style={styles.logTime}>{formatTime(entry.timestamp)}</Text>
+
                     <View
                       style={[
                         styles.logStateBadge,
-                        { backgroundColor: STATE_COLORS[entry.state as DetectionState] || theme.colors.textMuted },
+                        {
+                          backgroundColor:
+                            STATE_COLORS[entry.state as DetectionState] ||
+                            theme.colors.textMuted,
+                        },
                       ]}
                     >
                       <Text style={styles.logStateText}>{entry.state.toUpperCase()}</Text>
                     </View>
                   </View>
+
                   <Text style={styles.logReason}>{entry.reason}</Text>
+
                   {(entry.speed !== undefined || entry.distance !== undefined) && (
                     <View style={styles.logMetrics}>
                       {entry.speed !== undefined && (
@@ -322,6 +368,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
                           {entry.speed.toFixed(1)} km/h
                         </Text>
                       )}
+
                       {entry.distance !== undefined && (
                         <Text style={styles.logMetric}>
                           {entry.distance.toFixed(2)} km accumulated
@@ -335,25 +382,45 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Info box */}
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>HOW IT WORKS</Text>
           <Text style={styles.infoText}>
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>1.</Text> The OS wakes the app every ~30 seconds OR when you've moved 50m{'\n'}
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>2.</Text> A GPS snapshot is taken and added to a 10-snapshot rolling window{'\n'}
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>3.</Text> The state machine evaluates speed, consistency, and stops{'\n'}
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>4.</Text> If 2+ consecutive readings show 15+ km/h → DRIVING{'\n'}
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>5.</Text> Distance accumulates only while in DRIVING state{'\n'}
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>6.</Text> When stopped 5+ min → notification asks for confirmation{'\n'}
-            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>7.</Text> Confirmed trips update your vehicle's odometer
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              1.
+            </Text>{' '}
+            The OS wakes the app every ~30 seconds OR when you&apos;ve moved 50m{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              2.
+            </Text>{' '}
+            A GPS snapshot is taken and added to a 10-snapshot rolling window{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              3.
+            </Text>{' '}
+            The state machine evaluates speed, consistency, and stops{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              4.
+            </Text>{' '}
+            If 2+ consecutive readings show 15+ km/h → DRIVING{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              5.
+            </Text>{' '}
+            Distance accumulates only while in DRIVING state{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              6.
+            </Text>{' '}
+            When stopped 5+ min → notification asks for confirmation{'\n'}
+            <Text style={{ color: theme.colors.accent, fontWeight: theme.fontWeight.bold }}>
+              7.
+            </Text>{' '}
+            Confirmed trips update your vehicle&apos;s odometer
           </Text>
         </View>
 
-        {/* Battery note */}
         <View style={styles.warningBox}>
           <Text style={styles.warningTitle}>⚠ NOTE</Text>
           <Text style={styles.warningText}>
-            Background detection requires a custom dev build (npx expo prebuild). It does not work in Expo Go. The app must remain installed and not force-killed.
+            Background detection requires a custom dev build (npx expo prebuild). It
+            does not work in Expo Go. The app must remain installed and not force-killed.
           </Text>
         </View>
       </ScrollView>

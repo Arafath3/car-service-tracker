@@ -10,11 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
-import { useAuth } from '../context/AuthContext';
 import { addVehicle } from '../utils/storage';
 import { theme } from '../theme';
 import { RootStackParamList, VehicleType } from '../types';
@@ -22,7 +19,6 @@ import { RootStackParamList, VehicleType } from '../types';
 type Props = NativeStackScreenProps<RootStackParamList, 'AddVehicle'>;
 
 export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
-  const { user } = useAuth();
   const [type, setType] = useState<VehicleType>('car');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
@@ -34,37 +30,54 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSave = async () => {
     setError('');
-    if (!user) return;
+
     if (!make.trim() || !model.trim() || !year.trim() || !odometer.trim()) {
       setError('Please fill in make, model, year, and odometer');
       return;
     }
+
     const yearNum = parseInt(year, 10);
     const odoNum = parseFloat(odometer);
-    if (isNaN(yearNum) || yearNum < 1900 || yearNum > 2030) {
-      setError('Enter a valid year');
+    const currentYear = new Date().getFullYear();
+
+    if (isNaN(yearNum) || yearNum < 1900 || yearNum > currentYear + 1) {
+      setError(`Enter a valid year between 1900 and ${currentYear + 1}`);
       return;
     }
+
     if (isNaN(odoNum) || odoNum < 0) {
       setError('Enter a valid odometer reading');
       return;
     }
 
     setSaving(true);
-    await addVehicle({
-      id: uuidv4(),
-      userId: user.id,
-      type,
-      make: make.trim(),
-      model: model.trim(),
-      year: yearNum,
-      nickname: nickname.trim() || undefined,
-      currentOdometer: odoNum,
-      startingOdometer: odoNum,
-      createdAt: new Date().toISOString(),
-    });
-    setSaving(false);
-    navigation.goBack();
+
+    try {
+      await addVehicle({
+        type,
+        make: make.trim(),
+        model: model.trim(),
+        year: yearNum,
+        nickname: nickname.trim() || undefined,
+        currentOdometer: odoNum,
+        startingOdometer: odoNum,
+        createdAt: new Date().toISOString(),
+      });
+
+      navigation.goBack();
+    } catch (err: any) {
+      console.error('Error saving vehicle inside AddVehicleScreen:', err);
+
+      if (err?.code === 'firestore/permission-denied') {
+        setError('Storage sync failed: Access denied. Try re-logging in.');
+      } else if (err?.message?.includes('Storage is full')) {
+        setError('Device storage limit reached. Free up space or log in to use the cloud.');
+      } else {
+        setError(err?.message || 'An unexpected error occurred while saving. Please try again.');
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -77,12 +90,15 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
+
           <Text style={styles.title}>Add Vehicle</Text>
+
           <View style={{ width: 60 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.sectionLabel}>VEHICLE TYPE</Text>
+
           <View style={styles.typeRow}>
             <TouchableOpacity
               style={[styles.typeBox, type === 'car' && styles.typeBoxActive]}
@@ -94,6 +110,7 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
                 Car
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.typeBox, type === 'motorbike' && styles.typeBoxActive]}
               onPress={() => setType('motorbike')}
@@ -113,6 +130,7 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
             placeholder="e.g. Toyota, Honda, Yamaha"
             autoCapitalize="words"
           />
+
           <Input
             label="Model"
             value={model}
@@ -120,6 +138,7 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
             placeholder="e.g. Corolla, MT-07"
             autoCapitalize="words"
           />
+
           <Input
             label="Year"
             value={year}
@@ -128,12 +147,14 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
             keyboardType="numeric"
             maxLength={4}
           />
+
           <Input
             label="Nickname (optional)"
             value={nickname}
             onChangeText={setNickname}
             placeholder="e.g. Daily Driver"
           />
+
           <Input
             label="Current Odometer (km)"
             value={odometer}
@@ -223,6 +244,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
 });
