@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 import type {
-  User,
   Vehicle,
   ServiceRecord,
   Trip,
@@ -10,8 +13,6 @@ import type {
 } from '@/types';
 
 const KEYS = {
-  USERS: '@st_users',
-  CURRENT_USER: '@st_current_user',
   VEHICLES: '@st_vehicles',
   SERVICES: '@st_services',
   TRIPS: '@st_trips',
@@ -21,81 +22,147 @@ const KEYS = {
   STATE_LOG: '@st_state_log',
 };
 
-// ---------- USERS ----------
-export const getUsers = async (): Promise<User[]> => {
-  const raw = await AsyncStorage.getItem(KEYS.USERS);
-  return raw ? JSON.parse(raw) : [];
-};
-export const saveUsers = async (users: User[]): Promise<void> => {
-  await AsyncStorage.setItem(KEYS.USERS, JSON.stringify(users));
-};
-export const getCurrentUser = async (): Promise<User | null> => {
-  const raw = await AsyncStorage.getItem(KEYS.CURRENT_USER);
-  return raw ? JSON.parse(raw) : null;
-};
-export const setCurrentUser = async (user: User | null): Promise<void> => {
-  if (user) {
-    await AsyncStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(user));
-  } else {
-    await AsyncStorage.removeItem(KEYS.CURRENT_USER);
-  }
+const isCloudUser = (): boolean => !!auth().currentUser;
+const getUid = (): string => {
+  const u = auth().currentUser;
+  if (!u) throw new Error('getUid called without an authenticated user');
+  return u.uid;
 };
 
-// ---------- VEHICLES ----------
+// ---------- VEHICLES (HYBRID) ----------
 export const getVehicles = async (): Promise<Vehicle[]> => {
+  if (isCloudUser()) {
+    const snap = await firestore()
+      .collection('vehicles')
+      .where('userId', '==', getUid())
+      .get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Vehicle));
+  }
   const raw = await AsyncStorage.getItem(KEYS.VEHICLES);
   return raw ? JSON.parse(raw) : [];
 };
-export const saveVehicles = async (vehicles: Vehicle[]): Promise<void> => {
-  await AsyncStorage.setItem(KEYS.VEHICLES, JSON.stringify(vehicles));
-};
+
 export const getVehiclesForUser = async (userId: string): Promise<Vehicle[]> => {
+  if (isCloudUser()) return getVehicles();
   const all = await getVehicles();
   return all.filter((v) => v.userId === userId);
 };
-export const addVehicle = async (vehicle: Vehicle): Promise<void> => {
-  const all = await getVehicles();
-  all.push(vehicle);
-  await saveVehicles(all);
+
+export const saveVehicles = async (vehicles: Vehicle[]): Promise<void> => {
+  if (isCloudUser()) return;
+  await AsyncStorage.setItem(KEYS.VEHICLES, JSON.stringify(vehicles));
 };
+
+export const addVehicle = async (
+  vehicle: Omit<Vehicle, 'id' | 'userId'> & { id?: string; userId?: string }
+): Promise<string> => {
+  const id = vehicle.id ?? uuidv4();
+  if (isCloudUser()) {
+    const { id: _i, userId: _u, ...data } = vehicle;
+    await firestore()
+      .collection('vehicles')
+      .doc(id)
+      .set({ ...data, userId: getUid() });
+    return id;
+  }
+  const all = await getVehicles();
+  all.push({ ...vehicle, id, userId: vehicle.userId ?? 'guest_local' } as Vehicle);
+  await AsyncStorage.setItem(KEYS.VEHICLES, JSON.stringify(all));
+  return id;
+};
+
 export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
+  if (isCloudUser()) {
+    const { id, ...data } = vehicle;
+    await firestore().collection('vehicles').doc(id).update(data);
+    return;
+  }
   const all = await getVehicles();
   const idx = all.findIndex((v) => v.id === vehicle.id);
   if (idx >= 0) {
     all[idx] = vehicle;
-    await saveVehicles(all);
+    await AsyncStorage.setItem(KEYS.VEHICLES, JSON.stringify(all));
   }
 };
+
 export const deleteVehicle = async (vehicleId: string): Promise<void> => {
-  const all = await getVehicles();
-  await saveVehicles(all.filter((v) => v.id !== vehicleId));
-  const services = await getServices();
-  await saveServices(services.filter((s) => s.vehicleId !== vehicleId));
+  if (isCloudUser()) {
+    const batch = firestore().batch();
+    batch.delete(firestore().collection('vehicles').doc(vehicleId));
+    const services = await firestore()
+      .collection('services')
+      .where('vehicleId', '==', vehicleId)
+      .get();
+    services.forEach((s) => batch.delete(s.ref));
+    await batch.commit();
+  } else {
+    const all = await getVehicles();
+    await AsyncStorage.setItem(
+      KEYS.VEHICLES,
+      JSON.stringify(all.filter((v) => v.id !== vehicleId))
+    );
+    const services = await getLocalServices();
+    await AsyncStorage.setItem(
+      KEYS.SERVICES,
+      JSON.stringify(services.filter((s) => s.vehicleId !== vehicleId))
+    );
+  }
   const trips = await getTrips();
   await saveTrips(trips.filter((t) => t.vehicleId !== vehicleId));
+  const pending = await getPendingTrips();
+  await savePendingTrips(pending.filter((t) => t.vehicleId !== vehicleId));
 };
 
-// ---------- SERVICES ----------
-export const getServices = async (): Promise<ServiceRecord[]> => {
+// ---------- SERVICES (HYBRID) ----------
+const getLocalServices = async (): Promise<ServiceRecord[]> => {
   const raw = await AsyncStorage.getItem(KEYS.SERVICES);
   return raw ? JSON.parse(raw) : [];
 };
+
+export const getServices = async (): Promise<ServiceRecord[]> => {
+  if (isCloudUser()) return [];
+  return getLocalServices();
+};
+
 export const saveServices = async (services: ServiceRecord[]): Promise<void> => {
+  if (isCloudUser()) return;
   await AsyncStorage.setItem(KEYS.SERVICES, JSON.stringify(services));
 };
-export const getServicesForVehicle = async (vehicleId: string): Promise<ServiceRecord[]> => {
-  const all = await getServices();
+
+export const getServicesForVehicle = async (
+  vehicleId: string
+): Promise<ServiceRecord[]> => {
+  if (isCloudUser()) {
+    const snap = await firestore()
+      .collection('services')
+      .where('vehicleId', '==', vehicleId)
+      .get();
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as ServiceRecord))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
+  const all = await getLocalServices();
   return all
     .filter((s) => s.vehicleId === vehicleId)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
-export const addService = async (service: ServiceRecord): Promise<void> => {
-  const all = await getServices();
-  all.push(service);
-  await saveServices(all);
+
+export const addService = async (
+  service: Omit<ServiceRecord, 'id'> & { id?: string }
+): Promise<string> => {
+  const id = service.id ?? uuidv4();
+  if (isCloudUser()) {
+    const { id: _i, ...data } = service;
+    await firestore().collection('services').doc(id).set(data);
+    return id;
+  }
+  const all = await getLocalServices();
+  all.push({ ...service, id } as ServiceRecord);
+  await AsyncStorage.setItem(KEYS.SERVICES, JSON.stringify(all));
+  return id;
 };
 
-// ---------- TRIPS ----------
+// ---------- TRIPS (LOCAL ONLY) ----------
 export const getTrips = async (): Promise<Trip[]> => {
   const raw = await AsyncStorage.getItem(KEYS.TRIPS);
   return raw ? JSON.parse(raw) : [];
@@ -114,8 +181,16 @@ export const addTrip = async (trip: Trip): Promise<void> => {
   all.push(trip);
   await saveTrips(all);
 };
+export const updateTrip = async (trip: Trip): Promise<void> => {
+  const all = await getTrips();
+  const idx = all.findIndex((t) => t.id === trip.id);
+  if (idx >= 0) {
+    all[idx] = trip;
+    await saveTrips(all);
+  }
+};
 
-// ---------- DETECTION CONTEXT ----------
+// ---------- DETECTION CONTEXT (LOCAL ONLY) ----------
 export const getDetectionContext = async (): Promise<DetectionContext | null> => {
   const raw = await AsyncStorage.getItem(KEYS.DETECTION_CONTEXT);
   return raw ? JSON.parse(raw) : null;
@@ -124,7 +199,7 @@ export const saveDetectionContext = async (ctx: DetectionContext): Promise<void>
   await AsyncStorage.setItem(KEYS.DETECTION_CONTEXT, JSON.stringify(ctx));
 };
 
-// ---------- DETECTION CONFIG (tunable thresholds) ----------
+// ---------- DETECTION CONFIG (LOCAL ONLY) ----------
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   drivingMinKmh: 15,
   walkingMaxKmh: 10,
@@ -135,29 +210,25 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   rollingWindowSize: 10,
   roadCompensationFactor: 1.15,
 };
-
-// Demo preset: extremely sensitive, instant responses, walking triggers driving
 export const DEMO_DETECTION_CONFIG: DetectionConfig = {
   drivingMinKmh: 3,
   walkingMaxKmh: 1,
   movementSpeedKmh: 0.5,
   consecutiveDrivingRequired: 1,
   consecutiveStoppedRequired: 1,
-  validationDurationMs: 30 * 1000, // 30 sec instead of 5 min
+  validationDurationMs: 30 * 1000,
   rollingWindowSize: 5,
   roadCompensationFactor: 1.15,
 };
-
 export const getDetectionConfig = async (): Promise<DetectionConfig> => {
   const raw = await AsyncStorage.getItem(KEYS.DETECTION_CONFIG);
   return raw ? JSON.parse(raw) : DEFAULT_DETECTION_CONFIG;
 };
-
 export const saveDetectionConfig = async (cfg: DetectionConfig): Promise<void> => {
   await AsyncStorage.setItem(KEYS.DETECTION_CONFIG, JSON.stringify(cfg));
 };
 
-// ---------- PENDING TRIPS ----------
+// ---------- PENDING TRIPS (LOCAL ONLY) ----------
 export const getPendingTrips = async (): Promise<PendingTrip[]> => {
   const raw = await AsyncStorage.getItem(KEYS.PENDING_TRIPS);
   return raw ? JSON.parse(raw) : [];
@@ -183,7 +254,7 @@ export const getAwaitingConfirmation = async (): Promise<PendingTrip[]> => {
   return all.filter((t) => t.status === 'awaiting_confirmation');
 };
 
-// ---------- STATE LOG ----------
+// ---------- STATE LOG (LOCAL ONLY) ----------
 export interface StateLogEntry {
   timestamp: number;
   state: string;
@@ -195,8 +266,7 @@ export const appendStateLog = async (entry: StateLogEntry): Promise<void> => {
   const raw = await AsyncStorage.getItem(KEYS.STATE_LOG);
   const log: StateLogEntry[] = raw ? JSON.parse(raw) : [];
   log.push(entry);
-  const trimmed = log.slice(-100);
-  await AsyncStorage.setItem(KEYS.STATE_LOG, JSON.stringify(trimmed));
+  await AsyncStorage.setItem(KEYS.STATE_LOG, JSON.stringify(log.slice(-100)));
 };
 export const getStateLog = async (): Promise<StateLogEntry[]> => {
   const raw = await AsyncStorage.getItem(KEYS.STATE_LOG);

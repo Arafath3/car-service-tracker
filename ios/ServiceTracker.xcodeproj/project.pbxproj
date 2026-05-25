@@ -259,14 +259,12 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.arafath.servicetracker";
-				PRODUCT_NAME = "ServiceTracker";
+				PRODUCT_BUNDLE_IDENTIFIER = org.name.ServiceTracker;
+				PRODUCT_NAME = ServiceTracker;
 				SWIFT_OBJC_BRIDGING_HEADER = "ServiceTracker/ServiceTracker-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
-				TARGETED_DEVICE_FAMILY = "1";
-				CODE_SIGN_ENTITLEMENTS = ServiceTracker/ServiceTracker.entitlements;
 			};
 			name = Debug;
 		};
@@ -288,13 +286,11 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.arafath.servicetracker";
-				PRODUCT_NAME = "ServiceTracker";
+				PRODUCT_BUNDLE_IDENTIFIER = org.name.ServiceTracker;
+				PRODUCT_NAME = ServiceTracker;
 				SWIFT_OBJC_BRIDGING_HEADER = "ServiceTracker/ServiceTracker-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
-				TARGETED_DEVICE_FAMILY = "1";
-				CODE_SIGN_ENTITLEMENTS = ServiceTracker/ServiceTracker.entitlements;
 			};
 			name = Release;
 		};

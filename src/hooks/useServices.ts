@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import { getServicesForVehicle } from '../utils/storage';
+import { getServicesForVehicle } from '../lib/storage';
 import { ServiceRecord } from '../types';
 
 export const useServices = (vehicleId: string | undefined) => {

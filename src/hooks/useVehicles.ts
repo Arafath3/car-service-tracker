@@ -1,43 +1,67 @@
-// src/hooks/useVehicles.ts
 import { useState, useEffect } from 'react';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import { getVehicles } from '@/lib/storage';
+import { getServicesForVehicle } from '@/lib/storage';
 import { useAuth } from '@/context/AuthContext';
-import type { Vehicle } from '@/types';
+import type { ServiceRecord } from '@/types';
 
-export const useVehicles = () => {
+export const useServices = (vehicleId: string | undefined) => {
   const { user } = useAuth();
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    let unsub: (() => void) | null = null;
-    let mounted = true;
+    if (!vehicleId) {
+      setServices([]);
+      setLoading(false);
+      return;
+    }
+
+    let unsubscribeCloud: (() => void) | null = null;
+    let isMounted = true;
 
     const fb = auth().currentUser;
     if (fb) {
-      unsub = firestore()
-        .collection('vehicles')
-        .where('userId', '==', fb.uid)
+      setLoading(true);
+      unsubscribeCloud = firestore()
+        .collection('services')
+        .where('vehicleId', '==', vehicleId)
         .onSnapshot(
-          snap => {
-            if (!mounted) return;
-            setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vehicle)));
+          (snap) => {
+            if (!isMounted) return;
+            const list = snap.docs
+              .map((d) => ({ id: d.id, ...d.data() } as ServiceRecord))
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            setServices(list);
             setLoading(false);
           },
-          err => { if (mounted) { setError(err); setLoading(false); } }
+          (err) => {
+            if (!isMounted) return;
+            setError(err);
+            setLoading(false);
+          }
         );
     } else {
-      // Guest: one-shot local read
-      getVehicles()
-        .then(v => { if (mounted) { setVehicles(v); setLoading(false); } })
-        .catch(e => { if (mounted) { setError(e); setLoading(false); } });
+      setLoading(true);
+      getServicesForVehicle(vehicleId)
+        .then((s) => {
+          if (!isMounted) return;
+          setServices(s);
+          setLoading(false);
+        })
+        .catch((e) => {
+          if (!isMounted) return;
+          setError(e);
+          setLoading(false);
+        });
     }
 
-    return () => { mounted = false; unsub?.(); };
-  }, [user?.id, user?.isGuest]); // re-run when auth state changes
-  
-  return { vehicles, loading, error };
+    return () => {
+      isMounted = false;
+      if (unsubscribeCloud) unsubscribeCloud();
+    };
+  }, [vehicleId, user?.id, user?.isGuest]);
+
+  return { services, loading, error };
 };

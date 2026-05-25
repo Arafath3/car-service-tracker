@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '@/types';
 
 const GUEST_KEY = '@st_guest_user';
@@ -29,19 +29,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore guest session on cold boot, before Firebase fires
-    (async () => {
-      const raw = await AsyncStorage.getItem(GUEST_KEY);
-      if (raw && !auth().currentUser) setUser(JSON.parse(raw));
-    })();
-
     const unsub = auth().onAuthStateChanged(async (fb) => {
       if (fb) {
-        // Cloud login wins — clear guest session
         await AsyncStorage.removeItem(GUEST_KEY);
         setUser(mapFirebaseUser(fb));
       } else {
-        // No Firebase user: keep guest if one exists, otherwise null
         const raw = await AsyncStorage.getItem(GUEST_KEY);
         setUser(raw ? JSON.parse(raw) : null);
       }

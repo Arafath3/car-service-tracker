@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { ServiceStatus } from '../utils/serviceIntervals';
+import { ServiceStatus } from '../lib/serviceIntervals';
 import { theme } from '../theme';
 
 interface Props {

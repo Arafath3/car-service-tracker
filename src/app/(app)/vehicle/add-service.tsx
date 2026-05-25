@@ -10,8 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 import type { Vehicle } from '@/types';
 import { getVehicles, addService } from '@/lib/storage';
 import { getServiceIntervals } from '@/lib/serviceIntervals';
@@ -60,9 +58,8 @@ export default function AddServiceScreen() {
       return;
     }
 
-    setSaving(true);
+      setSaving(true);
     await addService({
-      id: uuidv4(),
       vehicleId: vehicleId!,
       serviceType,
       odometer: odoNum,

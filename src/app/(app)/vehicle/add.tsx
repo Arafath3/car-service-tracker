@@ -11,17 +11,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import { useAuth } from '@/context/AuthContext';
 import { addVehicle } from '@/lib/storage';
 import { theme } from '@/theme';
 import type { VehicleType } from '@/types';
 
 export default function AddVehicleScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const [type, setType] = useState<VehicleType>('car');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
@@ -33,7 +30,7 @@ export default function AddVehicleScreen() {
 
   const handleSave = async () => {
     setError('');
-    if (!user) return;
+
     if (!make.trim() || !model.trim() || !year.trim() || !odometer.trim()) {
       setError('Please fill in make, model, year, and odometer');
       return;
@@ -51,8 +48,6 @@ export default function AddVehicleScreen() {
 
     setSaving(true);
     await addVehicle({
-      id: uuidv4(),
-      userId: user.id,
       type,
       make: make.trim(),
       model: model.trim(),
