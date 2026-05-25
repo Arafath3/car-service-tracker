@@ -2,6 +2,7 @@
   "expo": {
     "name": "Service Tracker",
     "slug": "service-tracker",
+    "icon": "./logo.png",
     "scheme": "servicetracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,6 +14,8 @@
     },
     "android": {
       "package": "com.arafath.servicetracker",
+      "foregroundImage": "./logo.png",
+        "backgroundColor": "#0A0E1A",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
