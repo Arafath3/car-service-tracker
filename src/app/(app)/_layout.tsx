@@ -1,5 +1,5 @@
-import { Stack } from 'expo-router';
-import { theme } from '@/theme';
+import { Stack } from "expo-router";
+import { theme } from "@/theme";
 
 export default function AppLayout() {
   return (
@@ -10,13 +10,33 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="vehicle/add" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="vehicle/add" options={{ presentation: "modal" }} />
       <Stack.Screen name="vehicle/[id]" />
-      <Stack.Screen name="vehicle/edit-odometer" options={{ presentation: 'modal' }} />
-      <Stack.Screen name="vehicle/track-trip" options={{ presentation: 'modal' }} />
-      <Stack.Screen name="vehicle/add-service" options={{ presentation: 'modal' }} />
+      <Stack.Screen
+        name="vehicle/edit-odometer"
+        options={{ presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="vehicle/track-trip"
+        options={{ presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="vehicle/add-service"
+        options={{ presentation: "modal" }}
+      />
       <Stack.Screen name="detection/index" />
-      <Stack.Screen name="detection/confirm" options={{ presentation: 'modal' }} />
+      <Stack.Screen
+        name="detection/confirm"
+        options={{ presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="vehicle/rough-estimate"
+        options={{ presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="vehicle/manage-intervals"
+        options={{ presentation: "modal" }}
+      />
     </Stack>
   );
 }

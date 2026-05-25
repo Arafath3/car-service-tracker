@@ -1,17 +1,33 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { ServiceStatus } from '../lib/serviceIntervals';
-import { theme } from '../theme';
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { ServiceStatus } from "../lib/serviceIntervals";
+import { theme } from "../theme";
 
 interface Props {
   status: ServiceStatus;
 }
 
 const statusInfo = {
-  overdue: { color: theme.colors.danger, soft: theme.colors.dangerSoft, label: 'OVERDUE' },
-  'due-soon': { color: theme.colors.warning, soft: theme.colors.warningSoft, label: 'DUE SOON' },
-  ok: { color: theme.colors.success, soft: theme.colors.successSoft, label: 'OK' },
-  'never-done': { color: theme.colors.info, soft: theme.colors.infoSoft, label: 'NOT LOGGED' },
+  overdue: {
+    color: theme.colors.danger,
+    soft: theme.colors.dangerSoft,
+    label: "OVERDUE",
+  },
+  "due-soon": {
+    color: theme.colors.warning,
+    soft: theme.colors.warningSoft,
+    label: "DUE SOON",
+  },
+  ok: {
+    color: theme.colors.success,
+    soft: theme.colors.successSoft,
+    label: "OK",
+  },
+  "never-done": {
+    color: theme.colors.info,
+    soft: theme.colors.infoSoft,
+    label: "NOT LOGGED",
+  },
 };
 
 export const ServiceStatusCard: React.FC<Props> = ({ status }) => {
@@ -22,7 +38,9 @@ export const ServiceStatusCard: React.FC<Props> = ({ status }) => {
       <View style={styles.header}>
         <Text style={styles.serviceType}>{status.serviceType}</Text>
         <View style={[styles.badge, { backgroundColor: info.soft }]}>
-          <Text style={[styles.badgeText, { color: info.color }]}>{info.label}</Text>
+          <Text style={[styles.badgeText, { color: info.color }]}>
+            {info.label}
+          </Text>
         </View>
       </View>
 
@@ -39,14 +57,57 @@ export const ServiceStatusCard: React.FC<Props> = ({ status }) => {
           ]}
         />
       </View>
+      {status.daysRemaining != null && (
+        <Text
+          style={{
+            color:
+              status.status === "overdue"
+                ? theme.colors.danger
+                : theme.colors.textSecondary,
+            fontSize: theme.fontSize.xs,
+            marginTop: 2,
+          }}
+        >
+          {status.daysRemaining <= 0
+            ? `${Math.abs(status.daysRemaining)} days overdue`
+            : `${status.daysRemaining} days remaining`}
+        </Text>
+      )}
+      {status.source === "sticker" && (
+        <Text
+          style={{
+            color: theme.colors.accent,
+            fontSize: theme.fontSize.xs,
+            marginTop: 2,
+          }}
+        >
+          📋 From mechanic
+        </Text>
+      )}
+      {status.source === "estimated" && (
+        <Text
+          style={{
+            color: theme.colors.warning,
+            fontSize: theme.fontSize.xs,
+            marginTop: 2,
+          }}
+        >
+          ~ Estimated
+        </Text>
+      )}
 
       <View style={styles.detailsRow}>
         <Text style={styles.detail}>
           {status.lastDoneAt !== null
             ? `Last: ${status.lastDoneAt.toLocaleString()} km`
-            : 'Never logged'}
+            : "Never logged"}
         </Text>
-        <Text style={[styles.detail, { color: info.color, fontWeight: theme.fontWeight.semibold }]}>
+        <Text
+          style={[
+            styles.detail,
+            { color: info.color, fontWeight: theme.fontWeight.semibold },
+          ]}
+        >
           {status.kmRemaining > 0
             ? `${status.kmRemaining.toLocaleString()} km left`
             : `${Math.abs(status.kmRemaining).toLocaleString()} km overdue`}
@@ -66,9 +127,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 4,
   },
   serviceType: {
@@ -96,16 +157,16 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: theme.colors.bgInput,
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: theme.spacing.sm,
   },
   progressFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: 3,
   },
   detailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   detail: {
     color: theme.colors.textSecondary,

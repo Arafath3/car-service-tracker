@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,27 +7,28 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import type { Vehicle } from '@/types';
-import { getVehicles, addService } from '@/lib/storage';
-import { getServiceIntervals } from '@/lib/serviceIntervals';
-import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import type { Vehicle } from "@/types";
+import { getVehicles, addService } from "@/lib/storage";
+import { getServiceIntervals } from "@/lib/serviceIntervals";
+import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
 
 export default function AddServiceScreen() {
   const router = useRouter();
   const { id: vehicleId } = useLocalSearchParams<{ id: string }>();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [serviceType, setServiceType] = useState('');
-  const [odometer, setOdometer] = useState('');
-  const [cost, setCost] = useState('');
-  const [notes, setNotes] = useState('');
-  const [error, setError] = useState('');
+  const [serviceType, setServiceType] = useState("");
+  const [odometer, setOdometer] = useState("");
+  const [cost, setCost] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
+  const [nextDueOdometer, setNextDueOdometer] = useState("");
+  const [nextDueDate, setNextDueDate] = useState(""); // YYYY-MM-DD
   useEffect(() => {
     (async () => {
       if (!vehicleId) return;
@@ -41,24 +42,35 @@ export default function AddServiceScreen() {
   }, [vehicleId]);
 
   const handleSave = async () => {
-    setError('');
+    setError("");
     if (!vehicle) return;
     if (!serviceType) {
-      setError('Please select a service type');
+      setError("Please select a service type");
       return;
     }
     const odoNum = parseFloat(odometer);
     if (isNaN(odoNum) || odoNum < 0) {
-      setError('Enter a valid odometer reading');
+      setError("Enter a valid odometer reading");
       return;
     }
     const costNum = cost ? parseFloat(cost) : undefined;
     if (cost && (isNaN(costNum!) || costNum! < 0)) {
-      setError('Enter a valid cost');
+      setError("Enter a valid cost");
       return;
     }
 
-      setSaving(true);
+    const nextOdo = nextDueOdometer ? parseFloat(nextDueOdometer) : undefined;
+    const nextDate = nextDueDate.trim() || undefined;
+    if (nextOdo != null && (isNaN(nextOdo) || nextOdo < odoNum)) {
+      setError("Next service km must be greater than current odometer");
+      return;
+    }
+    if (nextDate && isNaN(new Date(nextDate).getTime())) {
+      setError("Enter date as YYYY-MM-DD");
+      return;
+    }
+
+    setSaving(true);
     await addService({
       vehicleId: vehicleId!,
       serviceType,
@@ -66,6 +78,8 @@ export default function AddServiceScreen() {
       date: new Date().toISOString(),
       notes: notes.trim() || undefined,
       cost: costNum,
+      nextDueOdometer: nextOdo,
+      nextDueDate: nextDate ? new Date(nextDate).toISOString() : undefined,
     });
     setSaving(false);
     router.back();
@@ -74,17 +88,19 @@ export default function AddServiceScreen() {
   if (!vehicle) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>Loading...</Text>
+        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>
+          Loading...
+        </Text>
       </SafeAreaView>
     );
   }
-
-  const intervals = getServiceIntervals(vehicle.type);
+  // flag
+  const intervals = getServiceIntervals(vehicle);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
         <View style={styles.headerBar}>
@@ -95,7 +111,10 @@ export default function AddServiceScreen() {
           <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.sectionLabel}>SERVICE TYPE</Text>
           <View style={styles.serviceList}>
             {intervals.map((s) => (
@@ -111,7 +130,8 @@ export default function AddServiceScreen() {
                 <Text
                   style={[
                     styles.serviceChipText,
-                    serviceType === s.serviceType && styles.serviceChipTextActive,
+                    serviceType === s.serviceType &&
+                      styles.serviceChipTextActive,
                   ]}
                 >
                   {s.serviceType}
@@ -141,10 +161,37 @@ export default function AddServiceScreen() {
             placeholder="Where was it done? Anything to remember?"
             multiline
             numberOfLines={3}
-            style={{ minHeight: 80, textAlignVertical: 'top' }}
+            style={{ minHeight: 80, textAlignVertical: "top" }}
           />
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              fontSize: theme.fontSize.xs,
+              fontWeight: theme.fontWeight.bold,
+              letterSpacing: 2,
+              marginTop: theme.spacing.lg,
+            }}
+          >
+            FROM MECHANIC STICKER (OPTIONAL)
+          </Text>
+
+          <Input
+            label="Next service due at (km)"
+            value={nextDueOdometer}
+            onChangeText={setNextDueOdometer}
+            keyboardType="numeric"
+            placeholder="e.g. 165000"
+          />
+
+          <Input
+            label="Next service due by (YYYY-MM-DD)"
+            value={nextDueDate}
+            onChangeText={setNextDueDate}
+            placeholder="e.g. 2026-12-15"
+            autoCapitalize="none"
+          />
 
           <Button
             title="Save Service Record"
@@ -163,9 +210,9 @@ export default function AddServiceScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
@@ -188,11 +235,11 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
     letterSpacing: 1,
     marginBottom: theme.spacing.sm,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   serviceList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     marginBottom: theme.spacing.lg,
   },
   serviceChip: {

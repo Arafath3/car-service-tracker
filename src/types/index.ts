@@ -20,22 +20,39 @@ export interface Vehicle {
   startingOdometer: number;
   color?: string;
   createdAt: string;
+  customIntervals?: Record<string, number>;
+  customServiceTypes?: ServiceInterval[];
+  estimation?: VehicleEstimation;
+}
+
+
+export interface VehicleEstimation{
+  status: 'pending_observation' | 'complete' | 'manual';
+  roughIntervalMonths: number;
+  observationStartedAt: string;
+  observationStartOdometer: number;
+  observationCompletedAt?: string;
+  estimatedDailyKm?: number;
+  estimatedLastServiceOdometer?: number;
 }
 
 export interface ServiceRecord {
   id: string;
   vehicleId: string;
-  serviceType: string;
-  odometer: number;
-  date: string;
+  serviceType?: string;
+  odometer?: number;
+  date?: string;
   notes?: string;
   cost?: number;
+  nextDueOdometer?:number;
+  nextDueDate?:string;
 }
 
 export interface ServiceInterval {
   serviceType: string;
   intervalKm: number;
   description: string;
+  intervalMonths?: number;
 }
 
 export interface Trip {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,20 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import type { Vehicle, ServiceRecord, Trip } from '@/types';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import type { Vehicle, ServiceRecord, Trip } from "@/types";
 import {
   getVehicles,
   getServicesForVehicle,
   getTripsForVehicle,
   deleteVehicle,
-} from '@/lib/storage';
-import { calculateServiceStatuses, ServiceStatus } from '@/lib/serviceIntervals';
-import { ServiceStatusCard, StatTile } from '@/components';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+  updateVehicle,
+} from "@/lib/storage";
+import {
+  calculateServiceStatuses,
+  ServiceStatus,
+} from "@/lib/serviceIntervals";
+import { ServiceStatusCard, StatTile } from "@/components";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
 
 export default function VehicleDetailScreen() {
   const router = useRouter();
@@ -38,6 +42,28 @@ export default function VehicleDetailScreen() {
       return;
     }
     setVehicle(v);
+    // Finalize estimation if 14 days have passed
+    if (v.estimation?.status === "pending_observation") {
+      const start = new Date(v.estimation.observationStartedAt).getTime();
+      const daysElapsed = (Date.now() - start) / (24 * 60 * 60 * 1000);
+      if (daysElapsed >= 14) {
+        const trips = await getTripsForVehicle(v.id);
+        const tripsDuringWindow = trips.filter(
+          (t) => new Date(t.startTime).getTime() >= start,
+        );
+        const totalKm = tripsDuringWindow.reduce(
+          (sum, t) => sum + t.distanceKm,
+          0,
+        );
+        const { finalizeEstimation } = await import("@/lib/serviceIntervals");
+        const finalized = finalizeEstimation(v, totalKm);
+        if (finalized) {
+          const updated = { ...v, estimation: finalized };
+          await updateVehicle(updated);
+          setVehicle(updated);
+        }
+      }
+    }
     const s = await getServicesForVehicle(vehicleId);
     setServices(s);
     const t = await getTripsForVehicle(vehicleId);
@@ -48,15 +74,15 @@ export default function VehicleDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load])
+    }, [load]),
   );
 
   const handleDelete = () => {
-    Alert.alert('Delete Vehicle', 'This removes all data. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Delete Vehicle", "This removes all data. Continue?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Delete',
-        style: 'destructive',
+        text: "Delete",
+        style: "destructive",
         onPress: async () => {
           await deleteVehicle(vehicleId!);
           router.back();
@@ -68,7 +94,9 @@ export default function VehicleDetailScreen() {
   if (!vehicle) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>Loading...</Text>
+        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>
+          Loading...
+        </Text>
       </SafeAreaView>
     );
   }
@@ -76,11 +104,11 @@ export default function VehicleDetailScreen() {
   const totalDistance = vehicle.currentOdometer - vehicle.startingOdometer;
   const totalTrips = trips.length;
   const totalServices = services.length;
-  const overdueCount = statuses.filter((s) => s.status === 'overdue').length;
-  const dueSoonCount = statuses.filter((s) => s.status === 'due-soon').length;
+  const overdueCount = statuses.filter((s) => s.status === "overdue").length;
+  const dueSoonCount = statuses.filter((s) => s.status === "due-soon").length;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.headerBar}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
@@ -92,13 +120,48 @@ export default function VehicleDetailScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.hero}>
-          <Text style={styles.heroEmoji}>{vehicle.type === 'car' ? '🚗' : '🏍️'}</Text>
+          <Text style={styles.heroEmoji}>
+            {vehicle.type === "car" ? "🚗" : "🏍️"}
+          </Text>
           <Text style={styles.heroNickname}>
             {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
           </Text>
           <Text style={styles.heroSubtitle}>
             {vehicle.year} · {vehicle.make} {vehicle.model}
           </Text>
+          {vehicle.estimation?.status === "pending_observation" && (
+            <View
+              style={{
+                backgroundColor: theme.colors.bgCard,
+                borderLeftWidth: 3,
+                borderLeftColor: theme.colors.accent,
+                padding: theme.spacing.md,
+                borderRadius: theme.radius.md,
+                marginTop: theme.spacing.md,
+              }}
+            >
+              <Text
+                style={{
+                  color: theme.colors.accent,
+                  fontSize: theme.fontSize.xs,
+                  fontWeight: theme.fontWeight.bold,
+                  letterSpacing: 2,
+                }}
+              >
+                REFINING ESTIMATE
+              </Text>
+              <Text
+                style={{
+                  color: theme.colors.textPrimary,
+                  fontSize: theme.fontSize.sm,
+                  marginTop: 4,
+                }}
+              >
+                We're learning your driving habits. Reminders use a rough
+                estimate for now.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Big odometer with EDIT button */}
@@ -106,7 +169,7 @@ export default function VehicleDetailScreen() {
           style={styles.odometerCard}
           onPress={() =>
             router.push({
-              pathname: '/(app)/vehicle/edit-odometer',
+              pathname: "/(app)/vehicle/edit-odometer",
               params: { id: vehicle.id },
             })
           }
@@ -129,12 +192,18 @@ export default function VehicleDetailScreen() {
         <View style={styles.statRow}>
           <StatTile
             label="Distance Driven"
-            value={totalDistance.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+            value={totalDistance.toLocaleString(undefined, {
+              maximumFractionDigits: 1,
+            })}
             unit="km"
             accent={theme.colors.accent}
           />
           <View style={{ width: theme.spacing.sm }} />
-          <StatTile label="Trips" value={String(totalTrips)} accent={theme.colors.info} />
+          <StatTile
+            label="Trips"
+            value={String(totalTrips)}
+            accent={theme.colors.info}
+          />
         </View>
         <View style={[styles.statRow, { marginTop: theme.spacing.sm }]}>
           <StatTile
@@ -155,7 +224,7 @@ export default function VehicleDetailScreen() {
             title="🛰  Track Trip Manually"
             onPress={() =>
               router.push({
-                pathname: '/(app)/vehicle/track-trip',
+                pathname: "/(app)/vehicle/track-trip",
                 params: { id: vehicle.id },
               })
             }
@@ -166,11 +235,24 @@ export default function VehicleDetailScreen() {
             title="+ Log Service"
             onPress={() =>
               router.push({
-                pathname: '/(app)/vehicle/add-service',
+                pathname: "/(app)/vehicle/add-service",
                 params: { id: vehicle.id },
               })
             }
             variant="secondary"
+            fullWidth
+            size="lg"
+            style={{ marginTop: theme.spacing.sm }}
+          />
+          <Button
+            title="⚙ Manage Service Intervals"
+            onPress={() =>
+              router.push({
+                pathname: "./(app)/vehicle/manage-intervals",
+                params: { id: vehicle.id },
+              })
+            }
+            variant="ghost"
             fullWidth
             size="lg"
             style={{ marginTop: theme.spacing.sm }}
@@ -184,7 +266,9 @@ export default function VehicleDetailScreen() {
 
         {services.length > 0 && (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: theme.spacing.xl }]}>
+            <Text
+              style={[styles.sectionTitle, { marginTop: theme.spacing.xl }]}
+            >
               SERVICE HISTORY
             </Text>
             {services.slice(0, 10).map((s) => (
@@ -192,10 +276,12 @@ export default function VehicleDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.historyType}>{s.serviceType}</Text>
                   <Text style={styles.historyDate}>
-                    {new Date(s.date).toLocaleDateString()} ·{' '}
+                    {new Date(s.date).toLocaleDateString()} ·{" "}
                     {s.odometer.toLocaleString()} km
                   </Text>
-                  {s.notes ? <Text style={styles.historyNotes}>{s.notes}</Text> : null}
+                  {s.notes ? (
+                    <Text style={styles.historyNotes}>{s.notes}</Text>
+                  ) : null}
                 </View>
                 {s.cost ? (
                   <Text style={styles.historyCost}>${s.cost.toFixed(0)}</Text>
@@ -207,24 +293,28 @@ export default function VehicleDetailScreen() {
 
         {trips.length > 0 && (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: theme.spacing.xl }]}>
+            <Text
+              style={[styles.sectionTitle, { marginTop: theme.spacing.xl }]}
+            >
               RECENT TRIPS
             </Text>
             {trips.slice(0, 5).map((t) => (
               <View key={t.id} style={styles.tripCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tripType}>
-                    {t.source === 'passive' ? '🛰 Auto-detected' : '📍 Manual'}
+                    {t.source === "passive" ? "🛰 Auto-detected" : "📍 Manual"}
                   </Text>
                   <Text style={styles.tripDate}>
-                    {new Date(t.startTime).toLocaleDateString()} ·{' '}
+                    {new Date(t.startTime).toLocaleDateString()} ·{" "}
                     {new Date(t.startTime).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                   </Text>
                 </View>
-                <Text style={styles.tripDistance}>{t.distanceKm.toFixed(2)} km</Text>
+                <Text style={styles.tripDistance}>
+                  {t.distanceKm.toFixed(2)} km
+                </Text>
               </View>
             ))}
           </>
@@ -237,8 +327,8 @@ export default function VehicleDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   headerBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
   },
@@ -252,8 +342,11 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.medium,
   },
-  scroll: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
-  hero: { alignItems: 'center', paddingVertical: theme.spacing.lg },
+  scroll: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  hero: { alignItems: "center", paddingVertical: theme.spacing.lg },
   heroEmoji: { fontSize: 56 },
   heroNickname: {
     color: theme.colors.textPrimary,
@@ -270,15 +363,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.xl,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: theme.spacing.lg,
     borderWidth: 1,
     borderColor: theme.colors.accent,
   },
   odometerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: theme.spacing.sm,
   },
   odometerLabel: {
@@ -295,7 +388,7 @@ const styles = StyleSheet.create({
     marginLeft: theme.spacing.sm,
   },
   editPillText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
     fontWeight: theme.fontWeight.bold,
     letterSpacing: 1,
@@ -312,7 +405,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     marginTop: 2,
   },
-  statRow: { flexDirection: 'row' },
+  statRow: { flexDirection: "row" },
   sectionTitle: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.xs,
@@ -326,8 +419,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
@@ -345,7 +438,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.sm,
     marginTop: 4,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   historyCost: {
     color: theme.colors.accent,
@@ -357,8 +450,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
