@@ -10,19 +10,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Vehicle, PendingTrip, RootStackParamList } from '../types';
-<<<<<<< Updated upstream
 import { useVehicles } from '../hooks/useVehicles';
 import {
   getPendingTripById,
   removePendingTrip,
   logTripDistance,
-=======
-import { useVehicles } from '../utils/useVehicles';
-import {
-  getPendingTripById,
-  removePendingTrip,
-  logTripDistance, // Using our centralized transaction processor
->>>>>>> Stashed changes
   saveDetectionContext,
   getDetectionContext,
 } from '../utils/storage';
@@ -34,11 +26,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ConfirmTrip'>;
 export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
   const { pendingTripId } = route.params;
   const { vehicles, loading: loadingVehicles } = useVehicles();
-<<<<<<< Updated upstream
-
-=======
-  
->>>>>>> Stashed changes
   const [trip, setTrip] = useState<PendingTrip | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +34,6 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
   // 1. Fetch the transient pending background log once on mount
   useEffect(() => {
     let isMounted = true;
-<<<<<<< Updated upstream
 
     const fetchPendingTrip = async () => {
       try {
@@ -65,7 +51,6 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
         }
 
         setTrip(pendingTrip);
-=======
     (async () => {
       try {
         const t = await getPendingTripById(pendingTripId);
@@ -78,12 +63,10 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
           return;
         }
         setTrip(t);
->>>>>>> Stashed changes
       } catch (err) {
         console.error('Error fetching pending trip data:', err);
         Alert.alert('Error', 'Failed to retrieve trip verification records.');
       } finally {
-<<<<<<< Updated upstream
         if (isMounted) {
           setLoadingTrip(false);
         }
@@ -106,14 +89,12 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
       }
     }
   }, [vehicles, trip, loadingVehicles]);
-=======
         if (isMounted) setLoadingTrip(false);
       }
     })();
 
     return () => { isMounted = false; };
   }, [pendingTripId]);
->>>>>>> Stashed changes
 
   // 2. Synchronize current vehicle object state reactively when hook stream delivers data
   useEffect(() => {
@@ -126,10 +107,7 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
   const resetDetectionContext = async () => {
     try {
       const ctx = await getDetectionContext();
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
       if (ctx) {
         await saveDetectionContext({
           ...ctx,
@@ -153,7 +131,6 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
     setBusy(true);
 
     try {
-<<<<<<< Updated upstream
       await logTripDistance(trip.vehicleId, trip.distanceKm);
       await removePendingTrip(trip.id);
       await resetDetectionContext();
@@ -176,30 +153,6 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
         'Submission Error',
         err?.message ||
           'Could not verify database synchronization. Please verify connectivity and try again.'
-=======
-      // centralized storage file automatically logs individual logs AND handles
-      // atomic increments on cloud backend / device disk storage safely
-      await logTripDistance(trip.vehicleId, trip.distanceKm);
-
-      // Clean up temporary internal snapshot record
-      await removePendingTrip(trip.id);
-
-      // Flush localized device engine loops back to tracking status
-      await resetDetectionContext();
-
-      const calculatedNewOdometer = vehicle.currentOdometer + trip.distanceKm;
-
-      Alert.alert(
-        'Trip Saved',
-        `${trip.distanceKm.toFixed(2)} km added to ${vehicle.nickname || vehicle.make}. New odometer: ${calculatedNewOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    } catch (err: any) {
-      console.error('Critical failure execution thread inside ConfirmTrip handleConfirm:', err);
-      Alert.alert(
-        'Submission Error',
-        err?.message || 'Could not verify database synchronization. Please verify connectivity and try again.'
->>>>>>> Stashed changes
       );
     } finally {
       setBusy(false);
@@ -216,10 +169,6 @@ export const ConfirmTripScreen: React.FC<Props> = ({ route, navigation }) => {
         style: 'destructive',
         onPress: async () => {
           setBusy(true);
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
           try {
             await removePendingTrip(trip.id);
             await resetDetectionContext();

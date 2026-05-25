@@ -122,3 +122,12 @@ export type RootStackParamList = {
 
   PassiveDetection: undefined;
 };
+
+
+export interface User {
+  id: string;            // Firebase uid for cloud users, 'guest_<uuid>' for guests
+  email: string | null;  // null for guests
+  displayName: string | null;
+  isGuest: boolean;
+  createdAt: string;
+}

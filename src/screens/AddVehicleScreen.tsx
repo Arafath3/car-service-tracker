@@ -12,11 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
-<<<<<<< Updated upstream
 import { addVehicle } from '../utils/storage';
-=======
 import { addVehicle } from '../utils/storage'; 
->>>>>>> Stashed changes
 import { theme } from '../theme';
 import { RootStackParamList, VehicleType } from '../types';
 
@@ -34,29 +31,19 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSave = async () => {
     setError('');
-<<<<<<< Updated upstream
 
-=======
     
-    // 1. Basic validation
->>>>>>> Stashed changes
+    // 1. Basic validations
     if (!make.trim() || !model.trim() || !year.trim() || !odometer.trim()) {
       setError('Please fill in make, model, year, and odometer');
       return;
     }
-<<<<<<< Updated upstream
 
-=======
     
->>>>>>> Stashed changes
     const yearNum = parseInt(year, 10);
     const odoNum = parseFloat(odometer);
     const currentYear = new Date().getFullYear();
 
-<<<<<<< Updated upstream
-=======
-    // 2. Numerical evaluation boundaries
->>>>>>> Stashed changes
     if (isNaN(yearNum) || yearNum < 1900 || yearNum > currentYear + 1) {
       setError(`Enter a valid year between 1900 and ${currentYear + 1}`);
       return;
@@ -68,15 +55,8 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     setSaving(true);
-<<<<<<< Updated upstream
 
     try {
-=======
-    
-    try {
-      // Stripped client-side uuid and user allocation blocks: 
-      // Handled dynamically by our background storage router layer
->>>>>>> Stashed changes
       await addVehicle({
         type,
         make: make.trim(),
@@ -87,21 +67,11 @@ export const AddVehicleScreen: React.FC<Props> = ({ navigation }) => {
         startingOdometer: odoNum,
         createdAt: new Date().toISOString(),
       });
-<<<<<<< Updated upstream
 
       navigation.goBack();
     } catch (err: any) {
       console.error('Error saving vehicle inside AddVehicleScreen:', err);
 
-=======
-      
-      navigation.goBack();
-    } catch (err: any) {
-      // Production debugging fallbacks
-      console.error('Error saving vehicle inside AddVehicleScreen line 63:', err);
-      
-      // Friendly, descriptive error outputs based on common exceptions
->>>>>>> Stashed changes
       if (err?.code === 'firestore/permission-denied') {
         setError('Storage sync failed: Access denied. Try re-logging in.');
       } else if (err?.message?.includes('Storage is full')) {
