@@ -50,6 +50,10 @@ export interface Trip {
   source?: 'manual' | 'passive';
 }
 
+// ============================================================================
+// PASSIVE DETECTION
+// ============================================================================
+
 export type DetectionState =
   | 'idle'
   | 'monitoring'
@@ -106,15 +110,15 @@ export interface DetectionConfig {
   roadCompensationFactor: number;
 }
 
-// THIS IS THE FIX — add RootStackParamList export
 export type RootStackParamList = {
   Home: undefined;
   Login: undefined;
   Signup: undefined;
   AddVehicle: undefined;
-  AddService: { vehicleId: string };
-  ConfirmTrip: { pendingTripId: string };
-  TrackTrip: { vehicleId: string };
-  VehicleDetail: { vehicleId: string };
+  TrackTrip: undefined;
+  AddService: undefined;
+  ConfirmTrip: undefined;
+  
+
   PassiveDetection: undefined;
 };

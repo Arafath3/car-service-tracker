@@ -12,15 +12,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { RootStackParamList, DetectionState, PendingTrip } from '../types';
+import { Vehicle, RootStackParamList, DetectionState, PendingTrip } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useVehicles } from '../hooks/useVehicles';
 import {
+  getVehiclesForUser,
   getDetectionContext,
-  getStateLog,
-  StateLogEntry,
-  clearStateLog,
-  getAwaitingConfirmation,
+  saveDetectionContext,
+  getStateLogs,         
+  clearStateLogs,       
+  getPendingTrips,      
 } from '../utils/storage';
 import {
   startPassiveDetection,
@@ -70,7 +71,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
   const [state, setState] = useState<DetectionState>('idle');
   const [snapshotCount, setSnapshotCount] = useState(0);
   const [accumulatedKm, setAccumulatedKm] = useState(0);
-  const [stateLog, setStateLog] = useState<StateLogEntry[]>([]);
+  const [stateLog, setStateLog] = useState<StateLog[]>([]);
   const [pending, setPending] = useState<PendingTrip[]>([]);
   const [showDebug, setShowDebug] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,33 +79,26 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
 
   const loadTelemetryMetrics = useCallback(async () => {
     if (!user) return;
+    const v = await getVehiclesForUser(user.id);
+    setVehicles(v);
 
-    try {
-      const ctx = await getDetectionContext();
-      const active = await isPassiveDetectionActive();
-
-      setEnabled(active);
-
-      if (ctx) {
-        setState(ctx.state);
-        setSnapshotCount(ctx.totalSnapshotsTaken);
-        setAccumulatedKm(ctx.accumulatedDistanceKm);
-
-        if (ctx.selectedVehicleId) {
-          setSelectedVehicleId(ctx.selectedVehicleId);
-        }
-      } else {
-        setState('idle');
-      }
-
-      const log = await getStateLog();
-      setStateLog([...log].reverse());
-
-      const pendingTrips = await getAwaitingConfirmation();
-      setPending(pendingTrips);
-    } catch (err) {
-      console.error('Failed to sync passive logging parameters:', err);
+    const ctx = await getDetectionContext();
+    const active = await isPassiveDetectionActive();
+    setEnabled(active);
+    if (ctx) {
+      setState(ctx.state);
+      setSnapshotCount(ctx.totalSnapshotsTaken);
+      setAccumulatedKm(ctx.accumulatedDistanceKm);
+      if (ctx.selectedVehicleId) setSelectedVehicleId(ctx.selectedVehicleId);
+    } else {
+      setState('idle');
     }
+
+    const log = await getStateLog();
+    setStateLog(log.reverse()); // newest first
+
+    const p = await getAwaitingConfirmation();
+    setPending(p);
   }, [user]);
 
   useEffect(() => {
@@ -167,7 +161,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleClearLog = async () => {
     await clearStateLog();
-    await loadTelemetryMetrics();
+    await loadData();
   };
 
   const formatTime = (ts: number) => {
@@ -205,7 +199,7 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={styles.pendingBanner}
             onPress={() =>
-              navigation.navigate('ConfirmTrip', { pendingTripId: pending[0].id })
+              navigation.navigate('ConfirmTrip', { pendingTripId: pending[0]?.id })
             }
             activeOpacity={0.85}
           >
@@ -358,20 +352,17 @@ export const PassiveDetectionScreen: React.FC<Props> = ({ navigation }) => {
                       <Text style={styles.logStateText}>{entry.state.toUpperCase()}</Text>
                     </View>
                   </View>
-
                   <Text style={styles.logReason}>{entry.reason}</Text>
-
                   {(entry.speed !== undefined || entry.distance !== undefined) && (
                     <View style={styles.logMetrics}>
-                      {entry.speed !== undefined && (
+                      {entry.speedKmh !== undefined && (
                         <Text style={styles.logMetric}>
-                          {entry.speed.toFixed(1)} km/h
+                          {entry.speedKmh.toFixed(1)} km/h
                         </Text>
                       )}
-
                       {entry.distance !== undefined && (
                         <Text style={styles.logMetric}>
-                          {entry.distance.toFixed(2)} km accumulated
+                          {entry.distanceDelta.toFixed(2)} km accumulated
                         </Text>
                       )}
                     </View>

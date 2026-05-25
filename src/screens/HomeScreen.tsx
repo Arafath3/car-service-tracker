@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { useVehicles } from '../hooks/useVehicles';
+import { useVehicles } from '../utils/useVehicles'; // Our reactive data layer hook
 import {
   getServicesForVehicle,
   getAwaitingConfirmation,
@@ -28,64 +28,88 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { user, logout } = useAuth();
-  const { vehicles, loading: loadingVehicles } = useVehicles();
-
+  
+  // Connect to our global, reactive stream of vehicles
+  const { vehicles, loading: loadingVehicles, refreshVehicles } = useVehicles();
+  
+  // Localized state for secondary calculations and telemetry background context
   const [servicesDueMap, setServicesDueMap] = useState<Record<string, number>>({});
   const [detectionActive, setDetectionActive] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadSecondaryData = useCallback(async () => {
-    const updatedMap: Record<string, number> = {};
-
-    await Promise.all(
-      vehicles.map(async (vehicle) => {
-        try {
-          const services = await getServicesForVehicle(vehicle.id);
-          const statuses = calculateServiceStatuses(vehicle, services);
-
-          const dueCount = statuses.filter(
-            (status) => status.status === 'overdue' || status.status === 'due-soon'
-          ).length;
-
-          updatedMap[vehicle.id] = dueCount;
-        } catch (err) {
-          console.error(`Failed to process service intervals for vehicle ${vehicle.id}:`, err);
-          updatedMap[vehicle.id] = 0;
-        }
-      })
-    );
-
-    setServicesDueMap(updatedMap);
-
-    try {
-      const active = await isPassiveDetectionActive();
-      const pending = await getAwaitingConfirmation();
-
-      setDetectionActive(active);
-      setPendingCount(pending.length);
-    } catch (err) {
-      console.error('Error synchronizing background telemetry monitoring status:', err);
-    }
-  }, [vehicles]);
-
+  // Calculate maintenance due states reactively when the vehicle list streams modifications
   React.useEffect(() => {
+    let isMounted = true;
+    
+    const evaluateAllServiceIntervals = async () => {
+      const updatedMap: Record<string, number> = {};
+      
+      await Promise.all(
+        vehicles.map(async (v) => {
+          try {
+            const services = await getServicesForVehicle(v.id);
+            const statuses = calculateServiceStatuses(v, services);
+            const dueCount = statuses.filter(
+              (s) => s.status === 'overdue' || s.status === 'due-soon'
+            ).length;
+            updatedMap[v.id] = dueCount;
+          } catch (err) {
+            console.error(`Failed to process service intervals for vehicle ${v.id}:`, err);
+            updatedMap[v.id] = 0;
+          }
+        })
+      );
+
+      if (isMounted) {
+        setServicesDueMap(updatedMap);
+      }
+    };
+
     if (vehicles.length > 0) {
-      loadSecondaryData();
+      evaluateAllServiceIntervals();
     } else {
       setServicesDueMap({});
     }
-  }, [vehicles, loadSecondaryData]);
 
+    return () => { isMounted = false; };
+  }, [vehicles]);
+
+  // Sync background sensor activity updates cleanly when screen shifts into view
   useFocusEffect(
     useCallback(() => {
-      loadSecondaryData();
-    }, [loadSecondaryData])
+      let isMounted = true;
+
+      const checkTelemetryStatus = async () => {
+        try {
+          const active = await isPassiveDetectionActive();
+          const pending = await getAwaitingConfirmation();
+          
+          if (isMounted) {
+            setDetectionActive(active);
+            setPendingCount(pending.length);
+          }
+        } catch (err) {
+          console.error('Error synchronizing background telemetry monitoring status:', err);
+        }
+      };
+
+      checkTelemetryStatus();
+      return () => { isMounted = false; };
+    }, [])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadSecondaryData();
+    // Explicitly triggers a cache-bust refresh down our hook's stream pipeline
+    await refreshVehicles(); 
+    
+    // Re-check background engine status
+    const active = await isPassiveDetectionActive();
+    const pending = await getAwaitingConfirmation();
+    setDetectionActive(active);
+    setPendingCount(pending.length);
+    
     setRefreshing(false);
   };
 
@@ -96,23 +120,20 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     ]);
   };
 
-  const totalServicesDue = vehicles.reduce(
-    (sum, vehicle) => sum + (servicesDueMap[vehicle.id] || 0),
-    0
-  );
+  // Compute total aggregate items safely from our local mapping state
+  const totalServicesDue = vehicles.reduce((sum, v) => sum + (servicesDueMap[v.id] || 0), 0);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
-            {user?.isGuest ? 'Welcome, Guest' : 'Welcome back'}
+            {user?.isGuest ? 'Welcome, Guest' : `Welcome back`}
           </Text>
           <Text style={styles.username}>
             {user?.isGuest ? 'Your data stays on this device' : user?.username}
           </Text>
         </View>
-
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>↗</Text>
         </TouchableOpacity>
@@ -133,7 +154,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.summaryNumber}>{vehicles.length}</Text>
             <Text style={styles.summaryLabel}>Vehicles</Text>
           </View>
-
           <View style={[styles.summaryCard, { marginLeft: theme.spacing.sm }]}>
             <Text style={[styles.summaryNumber, { color: theme.colors.warning }]}>
               {totalServicesDue}
@@ -142,8 +162,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Passive detection card */}
         <TouchableOpacity
-          style={[styles.passiveCard, detectionActive && styles.passiveCardActive]}
+          style={[
+            styles.passiveCard,
+            detectionActive && styles.passiveCardActive,
+          ]}
           onPress={() => navigation.navigate('PassiveDetection')}
           activeOpacity={0.85}
         >
@@ -160,21 +184,17 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <Text style={styles.passiveEmoji}>🛰️</Text>
             </View>
-
             <View style={{ flex: 1 }}>
               <Text style={styles.passiveTitle}>Auto-detect Trips</Text>
               <Text style={styles.passiveSubtitle}>
                 {pendingCount > 0
-                  ? `${pendingCount} trip${
-                      pendingCount > 1 ? 's' : ''
-                    } awaiting confirmation`
+                  ? `${pendingCount} trip${pendingCount > 1 ? 's' : ''} awaiting confirmation`
                   : detectionActive
                     ? 'Detection active in background'
                     : 'Tap to set up passive detection'}
               </Text>
             </View>
           </View>
-
           <View
             style={[
               styles.passiveStatus,

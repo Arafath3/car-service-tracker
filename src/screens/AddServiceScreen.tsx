@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList, Vehicle } from '../types';
-import { addService } from '../utils/storage';
-import { useVehicles } from '../hooks/useVehicles';
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
+import { Vehicle, RootStackParamList } from '../types';
+import { getVehicles, addService } from '../utils/storage';
 import { getServiceIntervals } from '../utils/serviceIntervals';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -23,8 +24,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AddService'>;
 
 export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
   const { vehicleId } = route.params;
-  const { vehicles, loading: loadingVehicles } = useVehicles();
-
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [serviceType, setServiceType] = useState('');
   const [odometer, setOdometer] = useState('');
@@ -33,18 +32,16 @@ export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Sync state when real-time hook fetches or updates vehicle profiles
   useEffect(() => {
     if (!loadingVehicles && vehicles.length > 0) {
       const v = vehicles.find((x) => x.id === vehicleId);
       if (v) {
         setVehicle(v);
-
-        if (!odometer) {
-          setOdometer(String(v.currentOdometer));
-        }
+        setOdometer(String(v.currentOdometer));
       }
-    }
-  }, [vehicles, vehicleId, loadingVehicles, odometer]);
+    })();
+  }, [vehicleId]);
 
   const handleSave = async () => {
     setError('');
@@ -69,26 +66,20 @@ export const AddServiceScreen: React.FC<Props> = ({ route, navigation }) => {
     }
 
     setSaving(true);
-
-    try {
-      await addService({
-        vehicleId,
-        serviceType,
-        odometer: odoNum,
-        date: new Date().toISOString(),
-        notes: notes.trim() || undefined,
-        cost: costNum,
-      });
-
-      navigation.goBack();
-    } catch (err) {
-      setError('Failed to save service record. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    await addService({
+      id: uuidv4(),
+      vehicleId,
+      serviceType,
+      odometer: odoNum,
+      date: new Date().toISOString(),
+      notes: notes.trim() || undefined,
+      cost: costNum,
+    });
+    setSaving(false);
+    navigation.goBack();
   };
 
-  if (loadingVehicles || !vehicle) {
+  if (!vehicle) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
