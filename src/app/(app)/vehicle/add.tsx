@@ -67,7 +67,7 @@ export default function AddVehicleScreen() {
             text: "Not sure — estimate",
             onPress: () =>
               router.replace({
-                pathname: "./(app)/vehicle/rough-estimate",
+                pathname: "/(app)/vehicle/rough-estimate",
                 params: { id: newId },
               }),
           },
