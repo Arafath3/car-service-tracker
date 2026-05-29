@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -18,6 +17,7 @@ import { haversineKm } from "@/lib/detectionEngine";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 export default function TrackTripScreen() {
   const router = useRouter();
@@ -34,6 +34,12 @@ export default function TrackTripScreen() {
   const startTime = useRef<Date | null>(null);
   const elapsedInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const tripIdRef = useRef<string>("");
+
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -115,7 +121,10 @@ export default function TrackTripScreen() {
     setTracking(false);
 
     if (!vehicle || !startTime.current || distanceKm < 0.01) {
-      Alert.alert("Trip too short", "No distance recorded.");
+      setAlertConfig({
+        title: "Trip too short",
+        message: "No distance recorded.",
+      });
       router.back();
       return;
     }
@@ -141,15 +150,17 @@ export default function TrackTripScreen() {
       ]),
     );
     if (saveErr) {
-      Alert.alert("Save failed", "Could not save the trip. Please try again.");
+      setAlertConfig({
+        title: "Save failed",
+        message: "Could not save the trip. Please try again.",
+      });
       return;
     }
-
-    Alert.alert(
-      "Trip Saved",
-      `Distance: ${finalDistance.toFixed(2)} km\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
-      [{ text: "OK", onPress: () => router.back() }],
-    );
+    setAlertConfig({
+      title: "Trip Saved",
+      message: `Distance: ${finalDistance.toFixed(2)} km\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
+      buttons: [{ text: "OK", onPress: () => router.back() }],
+    });
   };
 
   const formatTime = (sec: number): string => {
@@ -178,7 +189,10 @@ export default function TrackTripScreen() {
         <TouchableOpacity
           onPress={() => {
             if (tracking) {
-              Alert.alert("Trip in progress", "Stop tracking before leaving");
+              setAlertConfig({
+                title: "Trip in progress",
+                message: "Stop tracking before leaving",
+              });
               return;
             }
             router.back();
@@ -241,6 +255,13 @@ export default function TrackTripScreen() {
           />
         )}
       </ScrollView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }

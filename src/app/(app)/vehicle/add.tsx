@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -16,6 +15,7 @@ import { Button } from "@/components/Button";
 import { addVehicle } from "@/lib/storage";
 import { theme } from "@/theme";
 import type { VehicleType } from "@/types";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 export default function AddVehicleScreen() {
   const router = useRouter();
@@ -27,6 +27,11 @@ export default function AddVehicleScreen() {
   const [odometer, setOdometer] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   const handleSave = async () => {
     setError("");
@@ -58,11 +63,10 @@ export default function AddVehicleScreen() {
         createdAt: new Date().toISOString(),
       });
       setSaving(false);
-
-      Alert.alert(
-        "Vehicle added!",
-        "Do you know when this car was last serviced?",
-        [
+      setAlertConfig({
+        title: "Vehicle added!",
+        message: "Do you know when this car was last serviced?",
+        buttons: [
           {
             text: "Not sure — estimate",
             onPress: () =>
@@ -79,9 +83,9 @@ export default function AddVehicleScreen() {
                 params: { id: newId },
               }),
           },
-          { text: "Skip", onPress: () => router.back() },
+          { text: "Skip", style: "cancel", onPress: () => router.back() },
         ],
-      );
+      });
     } catch (err: any) {
       setSaving(false);
       console.error("[AddVehicle] save failed:", err);
@@ -199,6 +203,13 @@ export default function AddVehicleScreen() {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }

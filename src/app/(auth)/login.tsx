@@ -6,7 +6,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Link } from "expo-router";
@@ -25,6 +24,7 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/context/AuthContext";
 import { theme } from "@/theme";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 const authInstance = getAuth(getApp());
 
@@ -35,6 +35,11 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -93,14 +98,15 @@ export default function LoginScreen() {
   };
 
   const handleGuest = () => {
-    Alert.alert(
-      "Continue as Guest",
-      "Your vehicles and service history will only live on this device. Sign up later to back up your data.",
-      [
+    setAlertConfig({
+      title: "Continue as Guest",
+      message:
+        "Your vehicles and service history will only live on this device. Sign up later to back up your data.",
+      buttons: [
         { text: "Cancel", style: "cancel" },
         { text: "Continue", onPress: () => loginAsGuest() },
       ],
-    );
+    });
   };
 
   return (
@@ -179,6 +185,13 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }

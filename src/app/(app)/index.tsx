@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,21 +7,22 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
-import type { Vehicle } from '@/types';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
+import type { Vehicle } from "@/types";
 import {
   getVehiclesForUser,
   getServicesForVehicle,
   getAwaitingConfirmation,
-} from '@/lib/storage';
-import { calculateServiceStatuses } from '@/lib/serviceIntervals';
-import { isPassiveDetectionActive } from '@/lib/passiveDetectionService';
-import { VehicleCard } from '@/components';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+} from "@/lib/storage";
+import { calculateServiceStatuses } from "@/lib/serviceIntervals";
+import { isPassiveDetectionActive } from "@/lib/passiveDetectionService";
+import { VehicleCard } from "@/components";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 interface VehicleWithDue {
   vehicle: Vehicle;
@@ -36,6 +37,12 @@ export default function HomeScreen() {
   const [detectionActive, setDetectionActive] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     const v = await getVehiclesForUser(user.id);
@@ -44,10 +51,10 @@ export default function HomeScreen() {
         const services = await getServicesForVehicle(vehicle.id);
         const statuses = calculateServiceStatuses(vehicle, services);
         const due = statuses.filter(
-          (s) => s.status === 'overdue' || s.status === 'due-soon'
+          (s) => s.status === "overdue" || s.status === "due-soon",
         ).length;
         return { vehicle, servicesDue: due };
-      })
+      }),
     );
     setVehicles(withDue);
 
@@ -60,7 +67,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [loadData])
+    }, [loadData]),
   );
 
   const onRefresh = async () => {
@@ -70,21 +77,25 @@ export default function HomeScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => logout() },
-    ]);
+    setAlertConfig({
+      title: "Sign Out",
+      message: "Are you sure?",
+      buttons: [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign Out", style: "destructive", onPress: () => logout() },
+      ],
+    });
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
-            {user?.isGuest ? 'Welcome, Guest' : `Welcome back`}
+            {user?.isGuest ? "Welcome, Guest" : `Welcome back`}
           </Text>
           <Text style={styles.username}>
-            {user?.isGuest ? 'Data saved on this device' : user?.username}
+            {user?.isGuest ? "Data saved on this device" : user?.username}
           </Text>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
@@ -108,7 +119,9 @@ export default function HomeScreen() {
             <Text style={styles.summaryLabel}>Vehicles</Text>
           </View>
           <View style={[styles.summaryCard, { marginLeft: theme.spacing.sm }]}>
-            <Text style={[styles.summaryNumber, { color: theme.colors.warning }]}>
+            <Text
+              style={[styles.summaryNumber, { color: theme.colors.warning }]}
+            >
               {vehicles.reduce((sum, v) => sum + v.servicesDue, 0)}
             </Text>
             <Text style={styles.summaryLabel}>Services Due</Text>
@@ -116,8 +129,11 @@ export default function HomeScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.passiveCard, detectionActive && styles.passiveCardActive]}
-          onPress={() => router.push('/(app)/detection')}
+          style={[
+            styles.passiveCard,
+            detectionActive && styles.passiveCardActive,
+          ]}
+          onPress={() => router.push("/(app)/detection")}
           activeOpacity={0.85}
         >
           <View style={styles.passiveLeft}>
@@ -137,10 +153,10 @@ export default function HomeScreen() {
               <Text style={styles.passiveTitle}>Auto-detect Trips</Text>
               <Text style={styles.passiveSubtitle}>
                 {pendingCount > 0
-                  ? `${pendingCount} trip${pendingCount > 1 ? 's' : ''} awaiting confirmation`
+                  ? `${pendingCount} trip${pendingCount > 1 ? "s" : ""} awaiting confirmation`
                   : detectionActive
-                    ? 'Detection active in background'
-                    : 'Tap to set up passive detection'}
+                    ? "Detection active in background"
+                    : "Tap to set up passive detection"}
               </Text>
             </View>
           </View>
@@ -163,7 +179,8 @@ export default function HomeScreen() {
             <Text style={styles.emptyEmoji}>🚗</Text>
             <Text style={styles.emptyTitle}>No vehicles yet</Text>
             <Text style={styles.emptyText}>
-              Add your first car or motorbike to start tracking services and mileage
+              Add your first car or motorbike to start tracking services and
+              mileage
             </Text>
           </View>
         ) : (
@@ -179,13 +196,20 @@ export default function HomeScreen() {
 
         <Button
           title="+  Add Vehicle"
-          onPress={() => router.push('/(app)/vehicle/add')}
+          onPress={() => router.push("/(app)/vehicle/add")}
           variant="secondary"
           fullWidth
           size="lg"
           style={{ marginTop: theme.spacing.md }}
         />
       </ScrollView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -193,12 +217,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   header: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   greeting: {
     color: theme.colors.textPrimary,
@@ -211,24 +235,32 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   logoutBtn: {
-    width: 40, height: 40, borderRadius: theme.radius.md,
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.md,
     backgroundColor: theme.colors.bgCard,
-    borderWidth: 1, borderColor: theme.colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoutText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.lg,
     fontWeight: theme.fontWeight.bold,
   },
-  scroll: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
-  summaryRow: { flexDirection: 'row', marginBottom: theme.spacing.lg },
+  scroll: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  summaryRow: { flexDirection: "row", marginBottom: theme.spacing.lg },
   summaryCard: {
     flex: 1,
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
-    borderWidth: 1, borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   summaryNumber: {
     color: theme.colors.accent,
@@ -244,19 +276,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   passiveCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.xl,
-    borderWidth: 1, borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   passiveCardActive: { borderColor: theme.colors.success },
-  passiveLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  passiveLeft: { flex: 1, flexDirection: "row", alignItems: "center" },
   passiveIcon: {
-    width: 44, height: 44, borderRadius: theme.radius.md,
-    alignItems: 'center', justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: theme.spacing.md,
   },
   passiveEmoji: { fontSize: 20 },
@@ -271,7 +307,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   passiveStatus: {
-    width: 10, height: 10, borderRadius: 5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     marginLeft: theme.spacing.sm,
   },
   sectionTitle: {
@@ -281,7 +319,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: theme.spacing.md,
   },
-  empty: { alignItems: 'center', paddingVertical: theme.spacing.xxxl },
+  empty: { alignItems: "center", paddingVertical: theme.spacing.xxxl },
   emptyEmoji: { fontSize: 60, marginBottom: theme.spacing.md, opacity: 0.5 },
   emptyTitle: {
     color: theme.colors.textPrimary,
@@ -292,7 +330,7 @@ const styles = StyleSheet.create({
   emptyText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.md,
-    textAlign: 'center',
+    textAlign: "center",
     paddingHorizontal: theme.spacing.xl,
   },
 });

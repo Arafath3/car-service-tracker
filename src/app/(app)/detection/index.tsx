@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Switch,
   RefreshControl,
 } from "react-native";
@@ -32,6 +31,7 @@ import {
 } from "@/lib/passiveDetectionService";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 const STATE_COLORS: Record<DetectionState, string> = {
   idle: theme.colors.textMuted,
@@ -81,6 +81,12 @@ export default function PassiveDetectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -141,27 +147,29 @@ export default function PassiveDetectionScreen() {
     setBusy(true);
     if (next) {
       if (!selectedVehicleId) {
-        Alert.alert(
-          "Select a vehicle",
-          "Please select which vehicle to track first.",
-        );
+        setAlertConfig({
+          title: "Select a vehicle",
+          message: "Please select which vehicle to track first.",
+        });
+
         setBusy(false);
         return;
       }
       const result = await startPassiveDetection(selectedVehicleId);
       if (!result.success) {
-        Alert.alert(
-          "Could not start detection",
-          result.error || "Unknown error",
-        );
+        setAlertConfig({
+          title: "Could not start detection",
+          message: `${result.error} || "Unknown error"`,
+        });
         setBusy(false);
         return;
       }
       setEnabled(true);
-      Alert.alert(
-        "Detection Active",
-        "The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.",
-      );
+      setAlertConfig({
+        title: "Detection Active",
+        message:
+          "The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.",
+      });
     } else {
       await stopPassiveDetection();
       setEnabled(false);
@@ -172,27 +180,29 @@ export default function PassiveDetectionScreen() {
 
   const handleDemoMode = async (on: boolean) => {
     if (on) {
-      Alert.alert(
-        "Enable Demo Mode?",
-        "This lowers all thresholds so walking will be detected as driving. Perfect for screen recordings. Switch back to Normal Mode when done.",
-        [
+      setAlertConfig({
+        title: "Enable Demo Mode?",
+        message:
+          "This lowers all thresholds so walking will be detected as driving. Perfect for screen recordings. Switch back to Normal Mode when done.",
+        buttons: [
           { text: "Cancel", style: "cancel" },
           {
             text: "Enable",
+            style: "default",
             onPress: async () => {
               await saveDetectionConfig(DEMO_DETECTION_CONFIG);
               setDemoMode(true);
             },
           },
         ],
-      );
+      });
     } else {
       await saveDetectionConfig(DEFAULT_DETECTION_CONFIG);
       setDemoMode(false);
-      Alert.alert(
-        "Normal Mode",
-        "Thresholds reset for real driving detection.",
-      );
+      setAlertConfig({
+        title: "Normal Mode",
+        message: "Thresholds reset for real driving detection.",
+      });
     }
   };
 
@@ -455,6 +465,13 @@ export default function PassiveDetectionScreen() {
           </View>
         )}
       </ScrollView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }

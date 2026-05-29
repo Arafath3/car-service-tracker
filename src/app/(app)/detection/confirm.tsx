@@ -14,7 +14,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
@@ -37,6 +36,7 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 type Step = "verify" | "distance" | "vehicle" | "saving";
 
@@ -49,6 +49,12 @@ export default function ConfirmTripScreen() {
   const [step, setStep] = useState<Step>("verify");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   // Editable values for the confirmation flow
   const [editedDistance, setEditedDistance] = useState("");
@@ -66,17 +72,23 @@ export default function ConfirmTripScreen() {
       const [tripError, t] = await safeAwait(getPendingTripById(pendingTripId));
       if (!mounted) return;
       if (tripError) {
-        Alert.alert("Oops", "Something went wrong fetching the trip details.");
+        setAlertConfig({
+          title: "Oops",
+          message: "Something went wrong getting the trip details",
+        });
         setLoading(false);
         return;
       }
       if (!t) {
         setLoading(false);
-        Alert.alert(
-          "Not Found",
-          "This trip could not be found. It may already be confirmed.",
-          [{ text: "OK", onPress: () => router.back() }],
-        );
+        setAlertConfig({
+          title: "Not found",
+          message: "This trip could not be found. It may already be confirmed.",
+          buttons: [
+            { text: "OK", style: "default", onPress: () => router.back() },
+          ],
+        });
+
         return;
       }
 
@@ -87,7 +99,10 @@ export default function ConfirmTripScreen() {
       const [vehicleError, vs] = await safeAwait(getVehicles());
       if (!mounted) return;
       if (vehicleError || !vs) {
-        Alert.alert("Error", "Could not load your vehicles. Please try again.");
+        setAlertConfig({
+          title: "Error",
+          message: "Could not load your vehicles. Please try again.",
+        });
         setLoading(false);
         return;
       }
@@ -131,10 +146,11 @@ export default function ConfirmTripScreen() {
 
   // ---------- STEP 1: VERIFY ----------
   const handleNotMe = () => {
-    Alert.alert(
-      "Discard trip?",
-      "This trip will be permanently deleted because it wasn't a real drive.",
-      [
+    setAlertConfig({
+      title: "Discard trip?",
+      message:
+        "This trip will be permanently deleted because it wasn't a real drive.",
+      buttons: [
         { text: "Cancel", style: "cancel" },
         {
           text: "Discard",
@@ -149,7 +165,7 @@ export default function ConfirmTripScreen() {
           },
         },
       ],
-    );
+    });
   };
 
   const handleYesItWasMe = () => {
@@ -181,16 +197,21 @@ export default function ConfirmTripScreen() {
       return;
     }
     if (num > 1000) {
-      Alert.alert("Large distance", "That's a very long trip. Are you sure?", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Yes",
-          onPress: () => {
-            setEditingDistance(false);
-            handleDistanceCorrect();
+      setAlertConfig({
+        title: "Large distance",
+        message: "That's a very long trip. Are you sure?",
+        buttons: [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Yes",
+            style: "default",
+            onPress: () => {
+              setEditingDistance(false);
+              handleDistanceCorrect();
+            },
           },
-        },
-      ]);
+        ],
+      });
       return;
     }
     setEditingDistance(false);
@@ -204,7 +225,11 @@ export default function ConfirmTripScreen() {
 
   const handleConfirmVehicle = () => {
     if (!selectedVehicleId) {
-      Alert.alert("Pick a vehicle", "Select which vehicle you drove.");
+      setAlertConfig({
+        title: "Pick a vehicle",
+        message: "Select which vehicle you drove.",
+      });
+
       return;
     }
     saveTripFinal(
@@ -222,7 +247,7 @@ export default function ConfirmTripScreen() {
     const vehicle = allVehicles.find((v) => v?.id === vehicleId);
     if (!vehicle) {
       setBusy(false);
-      Alert.alert("Error", "Vehicle not found.");
+      setAlertConfig({ title: "Error", message: "Vehicle not found." });
       return;
     }
 
@@ -250,7 +275,10 @@ export default function ConfirmTripScreen() {
 
     if (saveError) {
       setBusy(false);
-      Alert.alert("Save failed", "Could not save the trip. Please try again.");
+      setAlertConfig({
+        title: "Save failed",
+        message: "Could not save the trip. Please try again.",
+      });
       return; // pending trip preserved → user can retry
     }
 
@@ -260,11 +288,11 @@ export default function ConfirmTripScreen() {
     );
 
     setBusy(false);
-    Alert.alert(
-      "✓ Trip Saved",
-      `${distance.toFixed(2)} km added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
-      [{ text: "OK", onPress: () => router.back() }],
-    );
+    setAlertConfig({
+      title: "✓ Trip Saved",
+      message: `${distance.toFixed(2)} km added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
+      buttons: [{ text: "OK", style: "default", onPress: () => router.back() }],
+    });
   };
 
   // ---------- RENDER ----------
@@ -586,6 +614,14 @@ export default function ConfirmTripScreen() {
           </View>
         )}
       </ScrollView>
+
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }

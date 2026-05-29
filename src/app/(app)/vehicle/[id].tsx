@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -25,6 +24,7 @@ import { ServiceStatusCard, StatTile } from "@/components";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { safeAwait, safeRead } from "@/lib/asyncWrapper";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 export default function VehicleDetailScreen() {
   const router = useRouter();
@@ -33,6 +33,11 @@ export default function VehicleDetailScreen() {
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [statuses, setStatuses] = useState<ServiceStatus[]>([]);
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!vehicleId) return;
@@ -79,22 +84,27 @@ export default function VehicleDetailScreen() {
   );
 
   const handleDelete = () => {
-    Alert.alert("Delete Vehicle", "This removes all data. Continue?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          const [err] = await safeAwait(deleteVehicle(vehicleId!));
-          if (!err) router.back();
-          else
-            Alert.alert(
-              "Delete failed",
-              "Could not delete this vehicle. Please try again.",
-            );
+    setAlertConfig({
+      title: "Delete Vehicle",
+      message: "This removes all data. Continue?",
+      buttons: [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const [err] = await safeAwait(deleteVehicle(vehicleId!));
+            if (!err) router.back();
+            else
+              setAlertConfig({
+                title: "Delete failed",
+                message: "Could not delete this vehicle. Please try again.",
+                buttons: [],
+              });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   if (!vehicle) {
@@ -360,6 +370,13 @@ export default function VehicleDetailScreen() {
           </>
         )}
       </ScrollView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }

@@ -1,30 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import type { Vehicle } from '@/types';
-import { getVehicles, updateVehicle } from '@/lib/storage';
-import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import type { Vehicle } from "@/types";
+import { getVehicles, updateVehicle } from "@/lib/storage";
+import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 export default function EditOdometerScreen() {
   const router = useRouter();
   const { id: vehicleId } = useLocalSearchParams<{ id: string }>();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [newOdometer, setNewOdometer] = useState('');
-  const [reason, setReason] = useState('');
-  const [error, setError] = useState('');
+  const [newOdometer, setNewOdometer] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -39,39 +44,44 @@ export default function EditOdometerScreen() {
   }, [vehicleId]);
 
   const handleSave = async () => {
-    setError('');
+    setError("");
     if (!vehicle) return;
 
     const odoNum = parseFloat(newOdometer);
     if (isNaN(odoNum) || odoNum < 0) {
-      setError('Enter a valid odometer reading');
+      setError("Enter a valid odometer reading");
       return;
     }
 
     // Warn if reducing the odometer (cars don't go backwards!)
     if (odoNum < vehicle.currentOdometer) {
-      Alert.alert(
-        'Decrease odometer?',
-        `You're reducing the odometer from ${vehicle.currentOdometer.toLocaleString()} km to ${odoNum.toLocaleString()} km. Vehicle odometers don't normally go down. Continue?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Yes, continue', onPress: () => save(odoNum) },
-        ]
-      );
+      setAlertConfig({
+        title: "Decrease odometer?",
+        message: `You're reducing the odometer from ${vehicle.currentOdometer.toLocaleString()} km to ${odoNum.toLocaleString()} km. Vehicle odometers don't normally go down. Continue?`,
+        buttons: [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Yes, continue",
+            style: "default",
+            onPress: () => save(odoNum),
+          },
+        ],
+      });
+
       return;
     }
 
     // Warn if huge jump (more than 10,000 km in one edit)
     const diff = odoNum - vehicle.currentOdometer;
     if (diff > 10000) {
-      Alert.alert(
-        'Large increase',
-        `You're adding ${diff.toLocaleString()} km in one edit. This seems large. Are you sure?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Yes, save', onPress: () => save(odoNum) },
-        ]
-      );
+      setAlertConfig({
+        title: "Large increase",
+        message: `You're adding ${diff.toLocaleString()} km in one edit. This seems large. Are you sure?`,
+        buttons: [
+          { text: "Cancel", style: "cancel" },
+          { text: "Yes, save", style: "default", onPress: () => save(odoNum) },
+        ],
+      });
       return;
     }
 
@@ -89,7 +99,9 @@ export default function EditOdometerScreen() {
   if (!vehicle) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>Loading...</Text>
+        <Text style={{ color: theme.colors.textPrimary, padding: 20 }}>
+          Loading...
+        </Text>
       </SafeAreaView>
     );
   }
@@ -98,9 +110,9 @@ export default function EditOdometerScreen() {
   const diff = newValue - vehicle.currentOdometer;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
         <View style={styles.headerBar}>
@@ -111,10 +123,13 @@ export default function EditOdometerScreen() {
           <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.vehicleBlock}>
             <Text style={styles.vehicleEmoji}>
-              {vehicle.type === 'car' ? '🚗' : '🏍️'}
+              {vehicle.type === "car" ? "🚗" : "🏍️"}
             </Text>
             <Text style={styles.vehicleName}>
               {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
@@ -129,7 +144,7 @@ export default function EditOdometerScreen() {
             <Text style={styles.currentValue}>
               {vehicle.currentOdometer.toLocaleString(undefined, {
                 maximumFractionDigits: 1,
-              })}{' '}
+              })}{" "}
               <Text style={styles.currentUnit}>km</Text>
             </Text>
           </View>
@@ -149,27 +164,39 @@ export default function EditOdometerScreen() {
                 styles.diffCard,
                 {
                   backgroundColor:
-                    diff > 0 ? theme.colors.successSoft : theme.colors.warningSoft,
-                  borderColor: diff > 0 ? theme.colors.success : theme.colors.warning,
+                    diff > 0
+                      ? theme.colors.successSoft
+                      : theme.colors.warningSoft,
+                  borderColor:
+                    diff > 0 ? theme.colors.success : theme.colors.warning,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.diffLabel,
-                  { color: diff > 0 ? theme.colors.success : theme.colors.warning },
+                  {
+                    color:
+                      diff > 0 ? theme.colors.success : theme.colors.warning,
+                  },
                 ]}
               >
-                {diff > 0 ? 'CHANGE' : 'REDUCTION'}
+                {diff > 0 ? "CHANGE" : "REDUCTION"}
               </Text>
               <Text
                 style={[
                   styles.diffValue,
-                  { color: diff > 0 ? theme.colors.success : theme.colors.warning },
+                  {
+                    color:
+                      diff > 0 ? theme.colors.success : theme.colors.warning,
+                  },
                 ]}
               >
-                {diff > 0 ? '+' : ''}
-                {diff.toLocaleString(undefined, { maximumFractionDigits: 1 })} km
+                {diff > 0 ? "+" : ""}
+                {diff.toLocaleString(undefined, {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                km
               </Text>
             </View>
           )}
@@ -181,7 +208,7 @@ export default function EditOdometerScreen() {
             placeholder="e.g. Fixing wrong reading, missed trip..."
             multiline
             numberOfLines={2}
-            style={{ minHeight: 60, textAlignVertical: 'top' }}
+            style={{ minHeight: 60, textAlignVertical: "top" }}
           />
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -198,14 +225,21 @@ export default function EditOdometerScreen() {
           <View style={styles.infoBox}>
             <Text style={styles.infoTitle}>WHEN TO EDIT</Text>
             <Text style={styles.infoText}>
-              • Your real dashboard shows a different value than the app{'\n'}
-              • You forgot to start tracking before a trip{'\n'}
-              • Auto-detection missed a drive{'\n'}
-              • You just bought the vehicle and want to enter actual odometer
+              • Your real dashboard shows a different value than the app{"\n"}•
+              You forgot to start tracking before a trip{"\n"}• Auto-detection
+              missed a drive{"\n"}• You just bought the vehicle and want to
+              enter actual odometer
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -213,9 +247,9 @@ export default function EditOdometerScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
@@ -233,7 +267,7 @@ const styles = StyleSheet.create({
   },
   scroll: { padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
   vehicleBlock: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: theme.spacing.md,
     marginBottom: theme.spacing.lg,
   },
@@ -256,7 +290,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    alignItems: 'center',
+    alignItems: "center",
   },
   currentLabel: {
     color: theme.colors.textMuted,
@@ -280,7 +314,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md,
     borderWidth: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   diffLabel: {
     fontSize: theme.fontSize.xs,
@@ -296,7 +330,7 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: theme.fontSize.sm,
     marginTop: theme.spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
   },
   infoBox: {
     marginTop: theme.spacing.xl,

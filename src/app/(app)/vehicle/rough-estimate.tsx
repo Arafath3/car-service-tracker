@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -14,6 +13,7 @@ import { getVehicles, updateVehicle } from "@/lib/storage";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { trySave } from "@/lib/asyncWrapper";
+import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 
 const OPTIONS: { label: string; months: number }[] = [
   { label: "3 months ago", months: 3 },
@@ -29,6 +29,11 @@ export default function RoughEstimateScreen() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{
+    title: string;
+    message?: string;
+    buttons?: AlertButton[];
+  } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,14 +64,17 @@ export default function RoughEstimateScreen() {
     const ok = await trySave(updateVehicle({ ...vehicle, estimation }));
     setSaving(false);
     if (!ok) return;
-    Alert.alert("Estimate started", "...", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
-    Alert.alert(
-      "Estimate started",
-      "We'll track your driving for 2 weeks to refine this estimate. Reminders will work in the meantime.",
-      [{ text: "OK", onPress: () => router.back() }],
-    );
+    setAlertConfig({
+      title: "Estimate started",
+      message: "...",
+      buttons: [{ text: "OK", onPress: () => router.back() }],
+    });
+    setAlertConfig({
+      title: "Estimate started",
+      message:
+        "We'll track your driving for 2 weeks to refine this estimate. Reminders will work in the meantime.",
+      buttons: [{ text: "OK", onPress: () => router.back() }],
+    });
   };
 
   if (!vehicle) {
@@ -121,6 +129,13 @@ export default function RoughEstimateScreen() {
           style={{ marginTop: theme.spacing.lg }}
         />
       </ScrollView>
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title ?? ""}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onRequestClose={() => setAlertConfig(null)}
+      />
     </SafeAreaView>
   );
 }
