@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,44 +7,54 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import auth from '@react-native-firebase/auth';
-import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { getApp } from "@react-native-firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+} from "@react-native-firebase/auth";
+import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
+
+const authInstance = getAuth(getApp());
 
 export default function SignupScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    setError('');
+    setError("");
     if (!email || !password || !confirm) {
-      setError('Please fill in all fields');
+      setError("Please fill in all fields");
       return;
     }
     if (password !== confirm) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
     setLoading(true);
     try {
-      await auth().createUserWithEmailAndPassword(email.trim(), password);
+      await createUserWithEmailAndPassword(
+        authInstance,
+        email.trim(),
+        password,
+      );
     } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
-        setError('That email address is already in use.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('The email address format is invalid.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password must be at least 6 characters.');
+      if (err.code === "auth/email-already-in-use") {
+        setError("That email address is already in use.");
+      } else if (err.code === "auth/invalid-email") {
+        setError("The email address format is invalid.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password must be at least 6 characters.");
       } else {
-        setError(err.message || 'Signup failed');
+        setError(err.message || "Signup failed");
       }
     } finally {
       setLoading(false);
@@ -54,17 +64,25 @@ export default function SignupScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
             <Text style={styles.backText}>← BACK</Text>
           </TouchableOpacity>
 
           <View style={styles.form}>
             <Text style={styles.heading}>Create account</Text>
-            <Text style={styles.subheading}>Track services, distance, and history</Text>
+            <Text style={styles.subheading}>
+              Track services, distance, and history
+            </Text>
 
             <Input
               label="Email"
@@ -102,7 +120,10 @@ export default function SignupScreen() {
               style={{ marginTop: theme.spacing.sm }}
             />
 
-            <TouchableOpacity onPress={() => router.back()} style={styles.loginRow}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.loginRow}
+            >
               <Text style={styles.loginPrompt}>Already have an account?</Text>
             </TouchableOpacity>
           </View>
@@ -129,6 +150,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   errorText: { color: theme.colors.danger, fontSize: theme.fontSize.sm },
-  loginRow: { alignItems: 'center', marginTop: theme.spacing.lg },
+  loginRow: { alignItems: "center", marginTop: theme.spacing.lg },
   loginPrompt: { color: theme.colors.accent },
 });

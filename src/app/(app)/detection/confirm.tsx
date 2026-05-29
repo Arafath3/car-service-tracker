@@ -8,7 +8,7 @@
 //   4. Save trip + update odometer
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,12 +17,12 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
-import type { Vehicle, PendingTrip, Trip } from '@/types';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
+import type { Vehicle, PendingTrip, Trip } from "@/types";
 import {
   getPendingTripById,
   getVehicles,
@@ -31,14 +31,14 @@ import {
   updateVehicle,
   saveDetectionContext,
   getDetectionContext,
-  getVehiclesForUser,
-} from '@/lib/storage';
-import { useAuth } from '@/context/AuthContext';
-import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+} from "@/lib/storage";
+import { useAuth } from "@/context/AuthContext";
+import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
+import { safeAwait } from "@/lib/asyncWrapper";
 
-type Step = 'verify' | 'distance' | 'vehicle' | 'saving';
+type Step = "verify" | "distance" | "vehicle" | "saving";
 
 export default function ConfirmTripScreen() {
   const router = useRouter();
@@ -46,64 +46,99 @@ export default function ConfirmTripScreen() {
   const { id: pendingTripId } = useLocalSearchParams<{ id: string }>();
   const [trip, setTrip] = useState<PendingTrip | null>(null);
   const [allVehicles, setAllVehicles] = useState<Vehicle[]>([]);
-  const [step, setStep] = useState<Step>('verify');
+  const [step, setStep] = useState<Step>("verify");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   // Editable values for the confirmation flow
-  const [editedDistance, setEditedDistance] = useState('');
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
-  const [distanceError, setDistanceError] = useState('');
+  const [editedDistance, setEditedDistance] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
+    null,
+  );
+  const [distanceError, setDistanceError] = useState("");
   const [editingDistance, setEditingDistance] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
       if (!pendingTripId || !user) return;
-      const t = await getPendingTripById(pendingTripId);
+
+      const [tripError, t] = await safeAwait(getPendingTripById(pendingTripId));
+      if (!mounted) return;
+      if (tripError) {
+        Alert.alert("Oops", "Something went wrong fetching the trip details.");
+        setLoading(false);
+        return;
+      }
       if (!t) {
+        setLoading(false);
         Alert.alert(
-          'Not Found',
-          'This trip could not be found. It may already be confirmed.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          "Not Found",
+          "This trip could not be found. It may already be confirmed.",
+          [{ text: "OK", onPress: () => router.back() }],
         );
         return;
       }
+
       setTrip(t);
       setEditedDistance(t.distanceKm.toFixed(2));
-      setSelectedVehicleId(t.vehicleId); // pre-select the originally tracked vehicle
+      setSelectedVehicleId(t.vehicleId);
 
-      const vs = await getVehiclesForUser(user.id);
+      const [vehicleError, vs] = await safeAwait(getVehicles());
+      if (!mounted) return;
+      if (vehicleError || !vs) {
+        Alert.alert("Error", "Could not load your vehicles. Please try again.");
+        setLoading(false);
+        return;
+      }
+
       setAllVehicles(vs);
       setLoading(false);
     })();
-  }, [pendingTripId, user]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [pendingTripId, user?.id]);
 
   const resetDetectionContext = async () => {
-    const ctx = await getDetectionContext();
-    if (ctx) {
-      await saveDetectionContext({
-        ...ctx,
-        state: ctx.enabled ? 'monitoring' : 'idle',
-        currentTripStartTime: null,
-        currentTripStartIndex: null,
-        accumulatedDistanceKm: 0,
-        stoppedSinceTimestamp: null,
-        recentSnapshots: [],
-        lastStateChangeAt: Date.now(),
-      });
+    const [ctxError, ctx] = await safeAwait(getDetectionContext());
+
+    if (ctxError || !ctx) {
+      return;
+    }
+
+    const updatedContext = {
+      ...ctx,
+      state: ctx.enabled ? ("monitoring" as const) : ("idle" as const),
+      currentTripStartTime: null,
+      currentTripStartIndex: null,
+      accumulatedDistanceKm: 0,
+      stoppedSinceTimestamp: null,
+      recentSnapshots: [],
+      lastStateChangeAt: Date.now(),
+    };
+
+    // 3. Safely SAVE the updated context (Fixing the crash risk)
+    const [saveError] = await safeAwait(saveDetectionContext(updatedContext));
+
+    if (saveError) {
+      // Log it or handle the save failure gracefully so the app stays alive
+      console.error("Failed to save the reset detection context:", saveError);
+      return;
     }
   };
 
   // ---------- STEP 1: VERIFY ----------
   const handleNotMe = () => {
     Alert.alert(
-      'Discard trip?',
-      'This trip will be permanently deleted because it wasn\'t a real drive.',
+      "Discard trip?",
+      "This trip will be permanently deleted because it wasn't a real drive.",
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Discard',
-          style: 'destructive',
+          text: "Discard",
+          style: "destructive",
           onPress: async () => {
             if (!trip) return;
             setBusy(true);
@@ -113,21 +148,24 @@ export default function ConfirmTripScreen() {
             router.back();
           },
         },
-      ]
+      ],
     );
   };
 
   const handleYesItWasMe = () => {
-    setStep('distance');
+    setStep("distance");
   };
 
   // ---------- STEP 2: DISTANCE ----------
   const handleDistanceCorrect = () => {
     // Decide whether to ask about vehicle
     if (allVehicles.length > 1) {
-      setStep('vehicle');
+      setStep("vehicle");
     } else {
-      saveTripFinal(parseFloat(editedDistance) || trip!.distanceKm, selectedVehicleId!);
+      saveTripFinal(
+        parseFloat(editedDistance) || trip!.distanceKm,
+        selectedVehicleId!,
+      );
     }
   };
 
@@ -136,17 +174,17 @@ export default function ConfirmTripScreen() {
   };
 
   const handleConfirmEditedDistance = () => {
-    setDistanceError('');
+    setDistanceError("");
     const num = parseFloat(editedDistance);
     if (isNaN(num) || num <= 0) {
-      setDistanceError('Enter a valid distance');
+      setDistanceError("Enter a valid distance");
       return;
     }
     if (num > 1000) {
-      Alert.alert('Large distance', 'That\'s a very long trip. Are you sure?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert("Large distance", "That's a very long trip. Are you sure?", [
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Yes',
+          text: "Yes",
           onPress: () => {
             setEditingDistance(false);
             handleDistanceCorrect();
@@ -166,28 +204,30 @@ export default function ConfirmTripScreen() {
 
   const handleConfirmVehicle = () => {
     if (!selectedVehicleId) {
-      Alert.alert('Pick a vehicle', 'Select which vehicle you drove.');
+      Alert.alert("Pick a vehicle", "Select which vehicle you drove.");
       return;
     }
-    saveTripFinal(parseFloat(editedDistance) || trip!.distanceKm, selectedVehicleId);
+    saveTripFinal(
+      parseFloat(editedDistance) || trip!.distanceKm,
+      selectedVehicleId,
+    );
   };
 
   // ---------- FINAL SAVE ----------
   const saveTripFinal = async (distance: number, vehicleId: string) => {
     if (!trip) return;
-    setStep('saving');
+    setStep("saving");
     setBusy(true);
 
-    const vehicle = allVehicles.find((v) => v.id === vehicleId);
+    const vehicle = allVehicles.find((v) => v?.id === vehicleId);
     if (!vehicle) {
       setBusy(false);
-      Alert.alert('Error', 'Vehicle not found.');
+      Alert.alert("Error", "Vehicle not found.");
       return;
     }
 
     const newOdometer = vehicle.currentOdometer + distance;
 
-    // Save trip record
     const newTrip: Trip = {
       id: uuidv4(),
       vehicleId,
@@ -197,23 +237,33 @@ export default function ConfirmTripScreen() {
       startOdometer: vehicle.currentOdometer,
       endOdometer: newOdometer,
       isActive: false,
-      source: 'passive',
+      source: "passive",
     };
-    await addTrip(newTrip);
 
-    // Update vehicle odometer
-    await updateVehicle({ ...vehicle, currentOdometer: newOdometer });
+    // 1. Critical writes — the trip and the odometer must both land.
+    const [saveError] = await safeAwait(
+      Promise.all([
+        addTrip(newTrip),
+        updateVehicle({ ...vehicle, currentOdometer: newOdometer }),
+      ]),
+    );
 
-    // Cleanup
-    await removePendingTrip(trip.id);
-    await resetDetectionContext();
+    if (saveError) {
+      setBusy(false);
+      Alert.alert("Save failed", "Could not save the trip. Please try again.");
+      return; // pending trip preserved → user can retry
+    }
+
+    // 2. Cleanup — only after the save is confirmed. Non-critical, best-effort.
+    await safeAwait(
+      Promise.all([removePendingTrip(trip.id), resetDetectionContext()]),
+    );
 
     setBusy(false);
-
     Alert.alert(
-      '✓ Trip Saved',
-      `${distance.toFixed(2)} km added to ${vehicle.nickname || vehicle.make + ' ' + vehicle.model}.\n\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
-      [{ text: 'OK', onPress: () => router.back() }]
+      "✓ Trip Saved",
+      `${distance.toFixed(2)} km added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
+      [{ text: "OK", onPress: () => router.back() }],
     );
   };
 
@@ -221,7 +271,11 @@ export default function ConfirmTripScreen() {
   if (loading || !trip) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={theme.colors.accent} size="large" style={{ flex: 1 }} />
+        <ActivityIndicator
+          color={theme.colors.accent}
+          size="large"
+          style={{ flex: 1 }}
+        />
       </SafeAreaView>
     );
   }
@@ -232,50 +286,58 @@ export default function ConfirmTripScreen() {
   const durationMin = Math.round((trip.endTime - trip.startTime) / 60000);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Progress dots */}
         <View style={styles.progressRow}>
           <View
             style={[
               styles.progressDot,
-              step === 'verify' && styles.progressDotActive,
+              step === "verify" && styles.progressDotActive,
             ]}
           />
           <View
             style={[
               styles.progressDot,
-              (step === 'distance' || step === 'vehicle') && styles.progressDotActive,
+              (step === "distance" || step === "vehicle") &&
+                styles.progressDotActive,
             ]}
           />
           {allVehicles.length > 1 && (
             <View
-              style={[styles.progressDot, step === 'vehicle' && styles.progressDotActive]}
+              style={[
+                styles.progressDot,
+                step === "vehicle" && styles.progressDotActive,
+              ]}
             />
           )}
         </View>
 
         {/* ============== STEP 1: VERIFY ============== */}
-        {step === 'verify' && (
+        {step === "verify" && (
           <>
             <View style={styles.header}>
               <Text style={styles.headerEmoji}>🚗</Text>
               <Text style={styles.title}>Trip detected</Text>
-              <Text style={styles.subtitle}>Was this you driving a vehicle?</Text>
+              <Text style={styles.subtitle}>
+                Was this you driving a vehicle?
+              </Text>
             </View>
 
             <View style={styles.summaryCard}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Distance</Text>
-                <Text style={styles.summaryValue}>{trip.distanceKm.toFixed(2)} km</Text>
+                <Text style={styles.summaryValue}>
+                  {trip.distanceKm.toFixed(2)} km
+                </Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Started</Text>
                 <Text style={styles.summaryValue}>
                   {startDate.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
+                    hour: "2-digit",
+                    minute: "2-digit",
                   })}
                 </Text>
               </View>
@@ -284,8 +346,8 @@ export default function ConfirmTripScreen() {
                 <Text style={styles.summaryLabel}>Ended</Text>
                 <Text style={styles.summaryValue}>
                   {endDate.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
+                    hour: "2-digit",
+                    minute: "2-digit",
                   })}
                 </Text>
               </View>
@@ -297,21 +359,23 @@ export default function ConfirmTripScreen() {
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Average Speed</Text>
-                <Text style={styles.summaryValue}>{trip.averageSpeedKmh.toFixed(1)} km/h</Text>
+                <Text style={styles.summaryValue}>
+                  {trip.averageSpeedKmh.toFixed(1)} km/h
+                </Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Max Speed</Text>
-                <Text style={styles.summaryValue}>{trip.maxSpeedKmh.toFixed(1)} km/h</Text>
+                <Text style={styles.summaryValue}>
+                  {trip.maxSpeedKmh.toFixed(1)} km/h
+                </Text>
               </View>
             </View>
 
-            <Text style={styles.questionTitle}>
-              Was this you in a vehicle?
-            </Text>
+            <Text style={styles.questionTitle}>Was this you in a vehicle?</Text>
             <Text style={styles.questionSub}>
-              If you weren't actually driving (e.g. you were a passenger on a bus or train),
-              tap "No, discard".
+              If you weren't actually driving (e.g. you were a passenger on a
+              bus or train), tap "No, discard".
             </Text>
 
             <Button
@@ -333,7 +397,7 @@ export default function ConfirmTripScreen() {
         )}
 
         {/* ============== STEP 2: DISTANCE ============== */}
-        {step === 'distance' && (
+        {step === "distance" && (
           <>
             <View style={styles.header}>
               <Text style={styles.headerEmoji}>📏</Text>
@@ -346,7 +410,9 @@ export default function ConfirmTripScreen() {
             {!editingDistance ? (
               <>
                 <View style={styles.distanceBigCard}>
-                  <Text style={styles.distanceBigLabel}>ESTIMATED DISTANCE</Text>
+                  <Text style={styles.distanceBigLabel}>
+                    ESTIMATED DISTANCE
+                  </Text>
                   <Text style={styles.distanceBigValue}>
                     {parseFloat(editedDistance).toFixed(2)}
                   </Text>
@@ -354,8 +420,9 @@ export default function ConfirmTripScreen() {
                 </View>
 
                 <Text style={styles.helperText}>
-                  This was estimated from GPS coordinates. Real distance may differ slightly
-                  due to road curvature and GPS sampling intervals.
+                  This was estimated from GPS coordinates. Real distance may
+                  differ slightly due to road curvature and GPS sampling
+                  intervals.
                 </Text>
 
                 <Button
@@ -375,7 +442,7 @@ export default function ConfirmTripScreen() {
                 />
                 <Button
                   title="← Back"
-                  onPress={() => setStep('verify')}
+                  onPress={() => setStep("verify")}
                   variant="ghost"
                   fullWidth
                   style={{ marginTop: theme.spacing.sm }}
@@ -395,7 +462,7 @@ export default function ConfirmTripScreen() {
                   value={editedDistance}
                   onChangeText={(t) => {
                     setEditedDistance(t);
-                    setDistanceError('');
+                    setDistanceError("");
                   }}
                   keyboardType="numeric"
                   placeholder="e.g. 13.5"
@@ -425,7 +492,7 @@ export default function ConfirmTripScreen() {
         )}
 
         {/* ============== STEP 3: VEHICLE PICKER ============== */}
-        {step === 'vehicle' && (
+        {step === "vehicle" && (
           <>
             <View style={styles.header}>
               <Text style={styles.headerEmoji}>🚙</Text>
@@ -451,12 +518,15 @@ export default function ConfirmTripScreen() {
               return (
                 <TouchableOpacity
                   key={v.id}
-                  style={[styles.vehicleOption, isSelected && styles.vehicleOptionActive]}
+                  style={[
+                    styles.vehicleOption,
+                    isSelected && styles.vehicleOptionActive,
+                  ]}
                   onPress={() => handleSelectVehicle(v.id)}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.vehicleOptionEmoji}>
-                    {v.type === 'car' ? '🚗' : '🏍️'}
+                    {v.type === "car" ? "🚗" : "🏍️"}
                   </Text>
                   <View style={{ flex: 1 }}>
                     <View style={styles.vehicleOptionTitleRow}>
@@ -475,11 +545,17 @@ export default function ConfirmTripScreen() {
                     <Text style={styles.vehicleOptionOdo}>
                       {v.currentOdometer.toLocaleString(undefined, {
                         maximumFractionDigits: 1,
-                      })}{' '}
-                      → {newOdo.toLocaleString(undefined, { maximumFractionDigits: 1 })} km
+                      })}{" "}
+                      →{" "}
+                      {newOdo.toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}{" "}
+                      km
                     </Text>
                   </View>
-                  <View style={[styles.radio, isSelected && styles.radioActive]} />
+                  <View
+                    style={[styles.radio, isSelected && styles.radioActive]}
+                  />
                 </TouchableOpacity>
               );
             })}
@@ -494,7 +570,7 @@ export default function ConfirmTripScreen() {
             />
             <Button
               title="← Back"
-              onPress={() => setStep('distance')}
+              onPress={() => setStep("distance")}
               variant="ghost"
               fullWidth
               style={{ marginTop: theme.spacing.sm }}
@@ -503,7 +579,7 @@ export default function ConfirmTripScreen() {
         )}
 
         {/* ============== STEP 4: SAVING ============== */}
-        {step === 'saving' && (
+        {step === "saving" && (
           <View style={styles.savingWrap}>
             <ActivityIndicator color={theme.colors.accent} size="large" />
             <Text style={styles.savingText}>Saving trip...</Text>
@@ -520,8 +596,8 @@ const styles = StyleSheet.create({
 
   // Progress
   progressRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
   },
@@ -537,7 +613,7 @@ const styles = StyleSheet.create({
 
   // Header (used in each step)
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: theme.spacing.lg,
   },
   headerEmoji: { fontSize: 48 },
@@ -546,13 +622,13 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xxl,
     fontWeight: theme.fontWeight.bold,
     marginTop: theme.spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.md,
     marginTop: 4,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   // Step 1: Verify
@@ -565,8 +641,8 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.md,
   },
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: theme.spacing.sm,
   },
   summaryLabel: {
@@ -587,13 +663,13 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.lg,
     fontWeight: theme.fontWeight.bold,
     marginTop: theme.spacing.lg,
-    textAlign: 'center',
+    textAlign: "center",
   },
   questionSub: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
     marginTop: theme.spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
     paddingHorizontal: theme.spacing.md,
     lineHeight: 20,
   },
@@ -603,7 +679,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.xl,
     padding: theme.spacing.xl,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 2,
     borderColor: theme.colors.accent,
     marginVertical: theme.spacing.lg,
@@ -628,7 +704,7 @@ const styles = StyleSheet.create({
   helperText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 20,
     paddingHorizontal: theme.spacing.md,
   },
@@ -637,7 +713,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     marginVertical: theme.spacing.md,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
@@ -656,9 +732,9 @@ const styles = StyleSheet.create({
 
   // Step 3: Vehicle
   distanceSmallCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: theme.colors.accentSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -684,8 +760,8 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.md,
   },
   vehicleOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -702,8 +778,8 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.md,
   },
   vehicleOptionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: theme.spacing.sm,
   },
   vehicleOptionName: {
@@ -719,7 +795,7 @@ const styles = StyleSheet.create({
     marginLeft: theme.spacing.sm,
   },
   originalBadgeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 9,
     fontWeight: theme.fontWeight.bold,
     letterSpacing: 0.5,
@@ -749,7 +825,7 @@ const styles = StyleSheet.create({
 
   // Saving
   savingWrap: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: theme.spacing.xxxl * 2,
   },
   savingText: {

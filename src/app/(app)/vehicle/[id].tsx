@@ -24,6 +24,7 @@ import {
 import { ServiceStatusCard, StatTile } from "@/components";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
+import { safeAwait, safeRead } from "@/lib/asyncWrapper";
 
 export default function VehicleDetailScreen() {
   const router = useRouter();
@@ -35,16 +36,16 @@ export default function VehicleDetailScreen() {
 
   const load = useCallback(async () => {
     if (!vehicleId) return;
-    const all = await getVehicles();
+    const all = await safeRead(getVehicles(), []);
     const v = all.find((x) => x.id === vehicleId);
     if (!v) {
-      router.back();
+      setVehicle(null);
       return;
     }
     setVehicle(v);
     // Finalize estimation if 14 days have passed
     if (v.estimation?.status === "pending_observation") {
-      const start = new Date(v.estimation.observationStartedAt).getTime();
+      const start = new Date(v?.estimation?.observationStartedAt)?.getTime();
       const daysElapsed = (Date.now() - start) / (24 * 60 * 60 * 1000);
       if (daysElapsed >= 14) {
         const trips = await getTripsForVehicle(v.id);
@@ -59,14 +60,14 @@ export default function VehicleDetailScreen() {
         const finalized = finalizeEstimation(v, totalKm);
         if (finalized) {
           const updated = { ...v, estimation: finalized };
-          await updateVehicle(updated);
-          setVehicle(updated);
+          const [err] = await safeAwait(updateVehicle(updated));
+          if (!err) setVehicle(updated);
         }
       }
     }
-    const s = await getServicesForVehicle(vehicleId);
+    const s = await safeRead(getServicesForVehicle(vehicleId!), []);
     setServices(s);
-    const t = await getTripsForVehicle(vehicleId);
+    const t = await safeRead(getTripsForVehicle(vehicleId!), []);
     setTrips(t);
     setStatuses(calculateServiceStatuses(v, s));
   }, [vehicleId, router]);
@@ -84,8 +85,13 @@ export default function VehicleDetailScreen() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
-          await deleteVehicle(vehicleId!);
-          router.back();
+          const [err] = await safeAwait(deleteVehicle(vehicleId!));
+          if (!err) router.back();
+          else
+            Alert.alert(
+              "Delete failed",
+              "Could not delete this vehicle. Please try again.",
+            );
         },
       },
     ]);

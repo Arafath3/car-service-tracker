@@ -8,6 +8,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -16,7 +17,6 @@ import { getBaseIntervals } from "@/lib/serviceIntervals";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
-import { /* existing... */ Switch } from "react-native";
 import {
   getVehicles,
   updateVehicle,
@@ -25,6 +25,7 @@ import {
   contributeToCommunity,
 } from "@/lib/storage";
 import { useAuth } from "@/context/AuthContext";
+import { trySave } from "@/lib/asyncWrapper";
 
 export default function ManageIntervalsScreen() {
   const router = useRouter();
@@ -114,8 +115,9 @@ export default function ManageIntervalsScreen() {
         : undefined,
       customServiceTypes: customs.length ? customs : undefined,
     };
-    await updateVehicle(updated);
-    contributeToCommunity(updated).catch(() => {}); // best-effort, don't block
+    const ok = await trySave(updateVehicle(updated));
+    if (!ok) return;
+    contributeToCommunity(updated).catch(() => {});
     router.back();
   };
 

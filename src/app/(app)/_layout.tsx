@@ -1,6 +1,48 @@
-import { Stack } from "expo-router";
+import { Stack, ErrorBoundaryProps } from "expo-router";
+import { View, Text, TouchableOpacity } from "react-native";
 import { theme } from "@/theme";
 
+// Fallback shown when a screen in this group crashes during render
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 24,
+        backgroundColor: theme.colors.bg,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: "bold",
+          color: theme.colors.textPrimary,
+          marginBottom: 8,
+        }}
+      >
+        Something went wrong
+      </Text>
+      <Text
+        style={{
+          textAlign: "center",
+          color: theme.colors.textSecondary,
+          marginBottom: 16,
+        }}
+      >
+        {error.message}
+      </Text>
+      <TouchableOpacity onPress={retry} style={{ padding: 12 }}>
+        <Text style={{ color: theme.colors.accent, fontWeight: "bold" }}>
+          Try again
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// The actual layout — this is what renders normally
 export default function AppLayout() {
   return (
     <Stack

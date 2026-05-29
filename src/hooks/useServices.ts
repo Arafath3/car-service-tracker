@@ -1,8 +1,17 @@
-import { useState, useEffect } from 'react';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import { getServicesForVehicle } from '../lib/storage';
-import { ServiceRecord } from '../types';
+import { useState, useEffect } from "react";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  onSnapshot,
+} from "@react-native-firebase/firestore";
+import { getServicesForVehicle } from "../lib/storage";
+import { ServiceRecord } from "../types";
+
+const db = getFirestore(getApp());
 
 export const useServices = (vehicleId: string | undefined) => {
   const [services, setServices] = useState<ServiceRecord[]>([]);
@@ -21,34 +30,35 @@ export const useServices = (vehicleId: string | undefined) => {
 
     const setupServiceListener = async () => {
       setLoading(true);
-      const currentUser = auth().currentUser;
+      const currentUser = getAuth(getApp()).currentUser;
 
       if (currentUser) {
         try {
-          unsubscribeCloud = firestore()
-            .collection('services')
-            .where('vehicleId', '==', vehicleId)
-            .onSnapshot(
-              (snapshot) => {
-                if (!isMounted) return;
+          unsubscribeCloud = onSnapshot(
+            query(
+              collection(db, "services"),
+              where("vehicleId", "==", vehicleId),
+            ),
+            (snapshot) => {
+              if (!isMounted) return;
 
-                const cloudServices = snapshot.docs
-                  .map((doc) => ({ id: doc.id, ...doc.data() } as ServiceRecord))
-                  .sort(
-                    (a, b) =>
-                      new Date(b.date).getTime() - new Date(a.date).getTime()
-                  );
+              const cloudServices = snapshot.docs
+                .map((doc) => ({ id: doc.id, ...doc.data() }) as ServiceRecord)
+                .sort(
+                  (a, b) =>
+                    new Date(b.date).getTime() - new Date(a.date).getTime(),
+                );
 
-                setServices(cloudServices);
+              setServices(cloudServices);
+              setLoading(false);
+            },
+            (err) => {
+              if (isMounted) {
+                setError(err);
                 setLoading(false);
-              },
-              (err) => {
-                if (isMounted) {
-                  setError(err);
-                  setLoading(false);
-                }
               }
-            );
+            },
+          );
         } catch (err) {
           if (isMounted) {
             setError(err as Error);

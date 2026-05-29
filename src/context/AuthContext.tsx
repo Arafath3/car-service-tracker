@@ -1,11 +1,24 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
-import type { User } from '@/types';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { getApp } from "@react-native-firebase/app";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signOut,
+  FirebaseAuthTypes,
+} from "@react-native-firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
+import type { User } from "@/types";
 
-const GUEST_KEY = '@st_guest_user';
+const GUEST_KEY = "@st_guest_user";
+const authInstance = getAuth(getApp());
 
 interface AuthContextValue {
   user: User | null;
@@ -24,12 +37,14 @@ const mapFirebaseUser = (fb: FirebaseAuthTypes.User): User => ({
   createdAt: fb.metadata.creationTime ?? new Date().toISOString(),
 });
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = auth().onAuthStateChanged(async (fb) => {
+    const unsub = onAuthStateChanged(authInstance, async (fb) => {
       if (fb) {
         await AsyncStorage.removeItem(GUEST_KEY);
         setUser(mapFirebaseUser(fb));
@@ -44,9 +59,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginAsGuest = async () => {
     const guest: User = {
-      id: 'guest_' + uuidv4(),
+      id: "guest_" + uuidv4(),
       email: null,
-      displayName: 'Guest',
+      displayName: "Guest",
       isGuest: true,
       createdAt: new Date().toISOString(),
     };
@@ -55,7 +70,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    if (auth().currentUser) await auth().signOut();
+    if (authInstance.currentUser) await signOut(authInstance);
     await AsyncStorage.removeItem(GUEST_KEY);
     setUser(null);
   };
@@ -69,6 +84,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useAuth = (): AuthContextValue => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 };

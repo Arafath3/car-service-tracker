@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,13 @@ import {
   Alert,
   Switch,
   RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import type { Vehicle, DetectionState, PendingTrip } from '@/types';
-import { useAuth } from '@/context/AuthContext';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useFocusEffect } from "expo-router";
+import type { Vehicle, DetectionState, PendingTrip } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 import {
-  getVehiclesForUser,
+  getVehicles,
   getDetectionContext,
   getStateLog,
   StateLogEntry,
@@ -24,13 +24,14 @@ import {
   saveDetectionConfig,
   DEFAULT_DETECTION_CONFIG,
   DEMO_DETECTION_CONFIG,
-} from '@/lib/storage';
+} from "@/lib/storage";
 import {
   startPassiveDetection,
   stopPassiveDetection,
   isPassiveDetectionActive,
-} from '@/lib/passiveDetectionService';
-import { theme } from '@/theme';
+} from "@/lib/passiveDetectionService";
+import { theme } from "@/theme";
+import { safeAwait } from "@/lib/asyncWrapper";
 
 const STATE_COLORS: Record<DetectionState, string> = {
   idle: theme.colors.textMuted,
@@ -43,32 +44,34 @@ const STATE_COLORS: Record<DetectionState, string> = {
 };
 
 const STATE_LABELS: Record<DetectionState, string> = {
-  idle: 'IDLE',
-  monitoring: 'MONITORING',
-  moving: 'MOVEMENT DETECTED',
-  driving: 'DRIVING',
-  stopped: 'STOPPED',
-  validating: 'VALIDATING END',
-  awaiting_confirmation: 'AWAITING CONFIRMATION',
+  idle: "IDLE",
+  monitoring: "MONITORING",
+  moving: "MOVEMENT DETECTED",
+  driving: "DRIVING",
+  stopped: "STOPPED",
+  validating: "VALIDATING END",
+  awaiting_confirmation: "AWAITING CONFIRMATION",
 };
 
 const STATE_DESCRIPTIONS: Record<DetectionState, string> = {
-  idle: 'Detection is off. Toggle on to begin monitoring.',
-  monitoring: 'Waiting for movement. App will sleep until OS wakes it.',
-  moving: 'Movement detected — evaluating if this is driving.',
-  driving: 'Driving confirmed. Distance is being tracked.',
-  stopped: 'Speed dropped — checking if trip has ended.',
-  validating: 'Validation window — confirming end of trip.',
-  awaiting_confirmation: 'Trip ready for review. Check notifications.',
+  idle: "Detection is off. Toggle on to begin monitoring.",
+  monitoring: "Waiting for movement. App will sleep until OS wakes it.",
+  moving: "Movement detected — evaluating if this is driving.",
+  driving: "Driving confirmed. Distance is being tracked.",
+  stopped: "Speed dropped — checking if trip has ended.",
+  validating: "Validation window — confirming end of trip.",
+  awaiting_confirmation: "Trip ready for review. Check notifications.",
 };
 
 export default function PassiveDetectionScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
+    null,
+  );
   const [enabled, setEnabled] = useState(false);
-  const [state, setState] = useState<DetectionState>('idle');
+  const [state, setState] = useState<DetectionState>("idle");
   const [snapshotCount, setSnapshotCount] = useState(0);
   const [accumulatedKm, setAccumulatedKm] = useState(0);
   const [stateLog, setStateLog] = useState<StateLogEntry[]>([]);
@@ -81,36 +84,50 @@ export default function PassiveDetectionScreen() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    const v = await getVehiclesForUser(user.id);
-    setVehicles(v);
 
-    const ctx = await getDetectionContext();
-    const active = await isPassiveDetectionActive();
-    setEnabled(active);
-    if (ctx) {
-      setState(ctx.state);
-      setSnapshotCount(ctx.totalSnapshotsTaken);
-      setAccumulatedKm(ctx.accumulatedDistanceKm);
-      if (ctx.selectedVehicleId) setSelectedVehicleId(ctx.selectedVehicleId);
-    } else {
-      setState('idle');
+    const [
+      [vError, v],
+      [ctxError, ctx],
+      [activeError, active],
+      [cfgError, cfg],
+      [logError, log],
+      [pError, p],
+    ] = await Promise.all([
+      safeAwait(getVehicles()),
+      safeAwait(getDetectionContext()),
+      safeAwait(isPassiveDetectionActive()),
+      safeAwait(getDetectionConfig()),
+      safeAwait(getStateLog()),
+      safeAwait(getAwaitingConfirmation()),
+    ]);
+
+    if (!vError && v) setVehicles(v);
+
+    if (!ctxError) {
+      if (ctx) {
+        setState(ctx.state);
+        setSnapshotCount(ctx.totalSnapshotsTaken);
+        setAccumulatedKm(ctx.accumulatedDistanceKm);
+        if (ctx.selectedVehicleId) setSelectedVehicleId(ctx.selectedVehicleId);
+      } else {
+        setState("idle");
+      }
     }
 
-    const cfg = await getDetectionConfig();
-    setDemoMode(cfg.drivingMinKmh < 10);
+    if (!activeError && active !== null) setEnabled(active);
 
-    const log = await getStateLog();
-    setStateLog(log.reverse());
-    const p = await getAwaitingConfirmation();
-    setPending(p);
-  }, [user]);
+    if (!cfgError && cfg) setDemoMode(cfg.drivingMinKmh < 10);
 
+    if (!logError && log) setStateLog(log.reverse());
+
+    if (!pError && p) setPending(p);
+  }, [user?.id]);
   useFocusEffect(
     useCallback(() => {
       loadData();
       const interval = setInterval(loadData, 3000);
       return () => clearInterval(interval);
-    }, [loadData])
+    }, [loadData]),
   );
 
   const onRefresh = async () => {
@@ -124,20 +141,26 @@ export default function PassiveDetectionScreen() {
     setBusy(true);
     if (next) {
       if (!selectedVehicleId) {
-        Alert.alert('Select a vehicle', 'Please select which vehicle to track first.');
+        Alert.alert(
+          "Select a vehicle",
+          "Please select which vehicle to track first.",
+        );
         setBusy(false);
         return;
       }
       const result = await startPassiveDetection(selectedVehicleId);
       if (!result.success) {
-        Alert.alert('Could not start detection', result.error || 'Unknown error');
+        Alert.alert(
+          "Could not start detection",
+          result.error || "Unknown error",
+        );
         setBusy(false);
         return;
       }
       setEnabled(true);
       Alert.alert(
-        'Detection Active',
-        'The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.'
+        "Detection Active",
+        "The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.",
       );
     } else {
       await stopPassiveDetection();
@@ -150,23 +173,26 @@ export default function PassiveDetectionScreen() {
   const handleDemoMode = async (on: boolean) => {
     if (on) {
       Alert.alert(
-        'Enable Demo Mode?',
-        'This lowers all thresholds so walking will be detected as driving. Perfect for screen recordings. Switch back to Normal Mode when done.',
+        "Enable Demo Mode?",
+        "This lowers all thresholds so walking will be detected as driving. Perfect for screen recordings. Switch back to Normal Mode when done.",
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: "Cancel", style: "cancel" },
           {
-            text: 'Enable',
+            text: "Enable",
             onPress: async () => {
               await saveDetectionConfig(DEMO_DETECTION_CONFIG);
               setDemoMode(true);
             },
           },
-        ]
+        ],
       );
     } else {
       await saveDetectionConfig(DEFAULT_DETECTION_CONFIG);
       setDemoMode(false);
-      Alert.alert('Normal Mode', 'Thresholds reset for real driving detection.');
+      Alert.alert(
+        "Normal Mode",
+        "Thresholds reset for real driving detection.",
+      );
     }
   };
 
@@ -177,11 +203,11 @@ export default function PassiveDetectionScreen() {
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.headerBar}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
@@ -205,7 +231,7 @@ export default function PassiveDetectionScreen() {
             style={styles.pendingBanner}
             onPress={() =>
               router.push({
-                pathname: '/(app)/detection/confirm',
+                pathname: "/(app)/detection/confirm",
                 params: { id: pending[0].id },
               })
             }
@@ -214,7 +240,8 @@ export default function PassiveDetectionScreen() {
             <View style={styles.pendingDot} />
             <View style={{ flex: 1 }}>
               <Text style={styles.pendingTitle}>
-                {pending.length} trip{pending.length > 1 ? 's' : ''} awaiting confirmation
+                {pending.length} trip{pending.length > 1 ? "s" : ""} awaiting
+                confirmation
               </Text>
               <Text style={styles.pendingSubtitle}>Tap to review</Text>
             </View>
@@ -225,12 +252,19 @@ export default function PassiveDetectionScreen() {
         <View style={styles.stateCard}>
           <Text style={styles.stateLabel}>CURRENT STATE</Text>
           <View style={styles.stateRow}>
-            <View style={[styles.stateDot, { backgroundColor: STATE_COLORS[state] }]} />
+            <View
+              style={[
+                styles.stateDot,
+                { backgroundColor: STATE_COLORS[state] },
+              ]}
+            />
             <Text style={[styles.stateValue, { color: STATE_COLORS[state] }]}>
               {STATE_LABELS[state]}
             </Text>
           </View>
-          <Text style={styles.stateDescription}>{STATE_DESCRIPTIONS[state]}</Text>
+          <Text style={styles.stateDescription}>
+            {STATE_DESCRIPTIONS[state]}
+          </Text>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
@@ -249,7 +283,9 @@ export default function PassiveDetectionScreen() {
 
         <Text style={styles.sectionTitle}>VEHICLE TO TRACK</Text>
         {vehicles.length === 0 ? (
-          <Text style={styles.emptyText}>Add a vehicle first from the home screen.</Text>
+          <Text style={styles.emptyText}>
+            Add a vehicle first from the home screen.
+          </Text>
         ) : (
           vehicles.map((v) => (
             <TouchableOpacity
@@ -262,7 +298,9 @@ export default function PassiveDetectionScreen() {
               activeOpacity={enabled ? 1 : 0.85}
               disabled={enabled}
             >
-              <Text style={styles.vehicleEmoji}>{v.type === 'car' ? '🚗' : '🏍️'}</Text>
+              <Text style={styles.vehicleEmoji}>
+                {v.type === "car" ? "🚗" : "🏍️"}
+              </Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.vehicleName}>
                   {v.nickname || `${v.make} ${v.model}`}
@@ -285,15 +323,20 @@ export default function PassiveDetectionScreen() {
           <View style={{ flex: 1, marginRight: theme.spacing.md }}>
             <Text style={styles.toggleTitle}>Background Detection</Text>
             <Text style={styles.toggleSubtitle}>
-              {enabled ? 'Active — close app and drive to test' : 'Toggle on to start monitoring'}
+              {enabled
+                ? "Active — close app and drive to test"
+                : "Toggle on to start monitoring"}
             </Text>
           </View>
           <Switch
             value={enabled}
             onValueChange={handleToggle}
             disabled={busy || vehicles.length === 0 || !selectedVehicleId}
-            trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
-            thumbColor={enabled ? '#fff' : theme.colors.textMuted}
+            trackColor={{
+              false: theme.colors.border,
+              true: theme.colors.accent,
+            }}
+            thumbColor={enabled ? "#fff" : theme.colors.textMuted}
           />
         </View>
 
@@ -303,7 +346,7 @@ export default function PassiveDetectionScreen() {
           onPress={() => setShowDemo(!showDemo)}
         >
           <Text style={styles.demoToggleText}>
-            {showDemo ? '▼' : '▶'} DEMO MODE {demoMode ? '· ACTIVE' : ''}
+            {showDemo ? "▼" : "▶"} DEMO MODE {demoMode ? "· ACTIVE" : ""}
           </Text>
         </TouchableOpacity>
 
@@ -316,22 +359,25 @@ export default function PassiveDetectionScreen() {
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.demoTitle}>
-                {demoMode ? '🎬 Demo Mode Active' : 'Enable Demo Mode'}
+                {demoMode ? "🎬 Demo Mode Active" : "Enable Demo Mode"}
               </Text>
               <Text style={styles.demoSubtitle}>
                 Lowers speed thresholds so walking triggers detection. Use for
                 screen recordings.
               </Text>
               <Text style={styles.demoSpecs}>
-                Driving threshold: {demoMode ? '3' : '15'} km/h{'\n'}
-                Validation: {demoMode ? '30 sec' : '5 min'}
+                Driving threshold: {demoMode ? "3" : "15"} km/h{"\n"}
+                Validation: {demoMode ? "30 sec" : "5 min"}
               </Text>
             </View>
             <Switch
               value={demoMode}
               onValueChange={handleDemoMode}
-              trackColor={{ false: theme.colors.border, true: theme.colors.purple }}
-              thumbColor={demoMode ? '#fff' : theme.colors.textMuted}
+              trackColor={{
+                false: theme.colors.border,
+                true: theme.colors.purple,
+              }}
+              thumbColor={demoMode ? "#fff" : theme.colors.textMuted}
             />
           </View>
         )}
@@ -342,7 +388,7 @@ export default function PassiveDetectionScreen() {
           onPress={() => setShowDebug(!showDebug)}
         >
           <Text style={styles.debugToggleText}>
-            {showDebug ? '▼' : '▶'} STATE MACHINE LOG
+            {showDebug ? "▼" : "▶"} STATE MACHINE LOG
           </Text>
           <Text style={styles.debugCount}>{stateLog.length} events</Text>
         </TouchableOpacity>
@@ -362,13 +408,16 @@ export default function PassiveDetectionScreen() {
 
             {stateLog.length === 0 ? (
               <Text style={styles.debugEmpty}>
-                No events yet. Toggle detection on and move to see the state machine.
+                No events yet. Toggle detection on and move to see the state
+                machine.
               </Text>
             ) : (
               stateLog.slice(0, 30).map((entry, idx) => (
                 <View key={idx} style={styles.logEntry}>
                   <View style={styles.logHeader}>
-                    <Text style={styles.logTime}>{formatTime(entry.timestamp)}</Text>
+                    <Text style={styles.logTime}>
+                      {formatTime(entry.timestamp)}
+                    </Text>
                     <View
                       style={[
                         styles.logStateBadge,
@@ -379,11 +428,14 @@ export default function PassiveDetectionScreen() {
                         },
                       ]}
                     >
-                      <Text style={styles.logStateText}>{entry.state.toUpperCase()}</Text>
+                      <Text style={styles.logStateText}>
+                        {entry.state.toUpperCase()}
+                      </Text>
                     </View>
                   </View>
                   <Text style={styles.logReason}>{entry.reason}</Text>
-                  {(entry.speed !== undefined || entry.distance !== undefined) && (
+                  {(entry.speed !== undefined ||
+                    entry.distance !== undefined) && (
                     <View style={styles.logMetrics}>
                       {entry.speed !== undefined && (
                         <Text style={styles.logMetric}>
@@ -410,9 +462,9 @@ export default function PassiveDetectionScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
@@ -430,8 +482,8 @@ const styles = StyleSheet.create({
   },
   scroll: { padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
   pendingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.accentSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -440,7 +492,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accent,
   },
   pendingDot: {
-    width: 10, height: 10, borderRadius: 5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: theme.colors.accent,
     marginRight: theme.spacing.md,
   },
@@ -473,9 +527,15 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
     letterSpacing: 2,
   },
-  stateRow: { flexDirection: 'row', alignItems: 'center', marginTop: theme.spacing.sm },
+  stateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: theme.spacing.sm,
+  },
   stateDot: {
-    width: 12, height: 12, borderRadius: 6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     marginRight: theme.spacing.sm,
   },
   stateValue: {
@@ -490,7 +550,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   statsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: theme.spacing.lg,
     gap: theme.spacing.sm,
   },
@@ -527,12 +587,12 @@ const styles = StyleSheet.create({
   emptyText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.md,
-    fontStyle: 'italic',
+    fontStyle: "italic",
     marginBottom: theme.spacing.lg,
   },
   vehicleItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -556,7 +616,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   radio: {
-    width: 22, height: 22, borderRadius: 11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: theme.colors.border,
   },
@@ -565,8 +627,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accent,
   },
   toggleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.bgCard,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
@@ -595,8 +657,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   demoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.purpleSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
@@ -623,9 +685,9 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   debugToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: theme.spacing.lg,
   },
   debugToggleText: {
@@ -646,9 +708,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   debugHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: theme.spacing.sm,
   },
   debugHeaderText: {
@@ -663,7 +725,7 @@ const styles = StyleSheet.create({
   debugEmpty: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.sm,
-    fontStyle: 'italic',
+    fontStyle: "italic",
     paddingVertical: theme.spacing.md,
   },
   logEntry: {
@@ -672,8 +734,8 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderLight,
   },
   logHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 4,
   },
   logTime: {
@@ -687,7 +749,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   logStateText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
     fontWeight: theme.fontWeight.bold,
     letterSpacing: 0.5,
@@ -697,7 +759,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
   logMetrics: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 4,
     gap: theme.spacing.md,
   },

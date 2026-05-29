@@ -1,20 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import type { Vehicle, VehicleEstimation } from '@/types';
-import { getVehicles, updateVehicle } from '@/lib/storage';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import type { Vehicle, VehicleEstimation } from "@/types";
+import { getVehicles, updateVehicle } from "@/lib/storage";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
+import { trySave } from "@/lib/asyncWrapper";
 
 const OPTIONS: { label: string; months: number }[] = [
-  { label: '3 months ago',  months: 3 },
-  { label: '6 months ago',  months: 6 },
-  { label: '1 year ago',    months: 12 },
-  { label: '18 months ago', months: 18 },
-  { label: '2+ years ago',  months: 24 },
+  { label: "3 months ago", months: 3 },
+  { label: "6 months ago", months: 6 },
+  { label: "1 year ago", months: 12 },
+  { label: "18 months ago", months: 18 },
+  { label: "2+ years ago", months: 24 },
 ];
 
 export default function RoughEstimateScreen() {
@@ -38,22 +44,28 @@ export default function RoughEstimateScreen() {
     setSaving(true);
 
     const estimation: VehicleEstimation = {
-      status: 'pending_observation',
+      status: "pending_observation",
       roughIntervalMonths: selected,
       observationStartedAt: new Date().toISOString(),
       observationStartOdometer: vehicle.currentOdometer,
       // Use 30 km/day as the placeholder estimate until observation completes
       estimatedDailyKm: 30,
-      estimatedLastServiceOdometer: Math.max(0, vehicle.currentOdometer - 30 * selected * 30),
+      estimatedLastServiceOdometer: Math.max(
+        0,
+        vehicle.currentOdometer - 30 * selected * 30,
+      ),
     };
 
-    await updateVehicle({ ...vehicle, estimation });
+    const ok = await trySave(updateVehicle({ ...vehicle, estimation }));
     setSaving(false);
-
+    if (!ok) return;
+    Alert.alert("Estimate started", "...", [
+      { text: "OK", onPress: () => router.back() },
+    ]);
     Alert.alert(
-      'Estimate started',
+      "Estimate started",
       "We'll track your driving for 2 weeks to refine this estimate. Reminders will work in the meantime.",
-      [{ text: 'OK', onPress: () => router.back() }]
+      [{ text: "OK", onPress: () => router.back() }],
     );
   };
 
@@ -66,7 +78,7 @@ export default function RoughEstimateScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Cancel</Text>
@@ -74,7 +86,8 @@ export default function RoughEstimateScreen() {
 
         <Text style={styles.title}>When did you last service this car?</Text>
         <Text style={styles.subtitle}>
-          Pick the closest option. We'll observe your driving for 2 weeks to refine the estimate.
+          Pick the closest option. We'll observe your driving for 2 weeks to
+          refine the estimate.
         </Text>
 
         {OPTIONS.map((opt) => (
@@ -87,10 +100,14 @@ export default function RoughEstimateScreen() {
             onPress={() => setSelected(opt.months)}
             activeOpacity={0.85}
           >
-            <Text style={[
-              styles.optionLabel,
-              selected === opt.months && styles.optionLabelActive,
-            ]}>{opt.label}</Text>
+            <Text
+              style={[
+                styles.optionLabel,
+                selected === opt.months && styles.optionLabelActive,
+              ]}
+            >
+              {opt.label}
+            </Text>
           </TouchableOpacity>
         ))}
 

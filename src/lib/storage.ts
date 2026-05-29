@@ -1,6 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import auth from "@react-native-firebase/auth";
-import firestore from "@react-native-firebase/firestore";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import {
+  getFirestore,
+  collection,
+  doc,
+  query,
+  where,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  increment,
+  serverTimestamp,
+} from "@react-native-firebase/firestore";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 import type {
@@ -22,9 +37,13 @@ const KEYS = {
   STATE_LOG: "@st_state_log",
 };
 
-const isCloudUser = (): boolean => !!auth().currentUser;
+// Shared modular handles
+const db = getFirestore(getApp());
+const authInstance = getAuth(getApp());
+
+const isCloudUser = (): boolean => !!authInstance.currentUser;
 const getUid = (): string => {
-  const u = auth().currentUser;
+  const u = authInstance.currentUser;
   if (!u) throw new Error("getUid called without an authenticated user");
   return u.uid;
 };
@@ -32,10 +51,9 @@ const getUid = (): string => {
 // ---------- VEHICLES (HYBRID) ----------
 export const getVehicles = async (): Promise<Vehicle[]> => {
   if (isCloudUser()) {
-    const snap = await firestore()
-      .collection("vehicles")
-      .where("userId", "==", getUid())
-      .get();
+    const snap = await getDocs(
+      query(collection(db, "vehicles"), where("userId", "==", getUid())),
+    );
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle);
   }
   const raw = await AsyncStorage.getItem(KEYS.VEHICLES);
@@ -61,10 +79,10 @@ export const addVehicle = async (
   const id = vehicle.id ?? uuidv4();
   if (isCloudUser()) {
     const { id: _i, userId: _u, ...data } = vehicle;
-    await firestore()
-      .collection("vehicles")
-      .doc(id)
-      .set(stripUndefined({ ...data, userId: getUid() }));
+    await setDoc(
+      doc(db, "vehicles", id),
+      stripUndefined({ ...data, userId: getUid() }),
+    );
     return id;
   }
   const all = await getVehicles();
@@ -80,10 +98,7 @@ export const addVehicle = async (
 export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
   if (isCloudUser()) {
     const { id, ...data } = vehicle;
-    await firestore()
-      .collection("vehicles")
-      .doc(id)
-      .update(stripUndefined(data));
+    await updateDoc(doc(db, "vehicles", id), stripUndefined(data));
     return;
   }
   const all = await getVehicles();
@@ -96,12 +111,11 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
 
 export const deleteVehicle = async (vehicleId: string): Promise<void> => {
   if (isCloudUser()) {
-    const batch = firestore().batch();
-    batch.delete(firestore().collection("vehicles").doc(vehicleId));
-    const services = await firestore()
-      .collection("services")
-      .where("vehicleId", "==", vehicleId)
-      .get();
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "vehicles", vehicleId));
+    const services = await getDocs(
+      query(collection(db, "services"), where("vehicleId", "==", vehicleId)),
+    );
     services.forEach((s) => batch.delete(s.ref));
     await batch.commit();
   } else {
@@ -144,10 +158,9 @@ export const getServicesForVehicle = async (
   vehicleId: string,
 ): Promise<ServiceRecord[]> => {
   if (isCloudUser()) {
-    const snap = await firestore()
-      .collection("services")
-      .where("vehicleId", "==", vehicleId)
-      .get();
+    const snap = await getDocs(
+      query(collection(db, "services"), where("vehicleId", "==", vehicleId)),
+    );
     return snap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as ServiceRecord)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -164,7 +177,7 @@ export const addService = async (
   const id = service.id ?? uuidv4();
   if (isCloudUser()) {
     const { id: _i, ...data } = service;
-    await firestore().collection("services").doc(id).set(stripUndefined(data));
+    await setDoc(doc(db, "services", id), stripUndefined(data));
     return id;
   }
   const all = await getLocalServices();
@@ -377,19 +390,19 @@ export const contributeToCommunity = async (
 
     if (newVal != null && oldVal == null) {
       intervalsUpdate[serviceType] = {
-        count: firestore.FieldValue.increment(1),
-        sum: firestore.FieldValue.increment(newVal),
+        count: increment(1),
+        sum: increment(newVal),
       };
       changed = true;
     } else if (newVal != null && oldVal != null && newVal !== oldVal) {
       intervalsUpdate[serviceType] = {
-        sum: firestore.FieldValue.increment(newVal - oldVal),
+        sum: increment(newVal - oldVal),
       };
       changed = true;
     } else if (newVal == null && oldVal != null) {
       intervalsUpdate[serviceType] = {
-        count: firestore.FieldValue.increment(-1),
-        sum: firestore.FieldValue.increment(-oldVal),
+        count: increment(-1),
+        sum: increment(-oldVal),
       };
       changed = true;
     }
@@ -398,7 +411,8 @@ export const contributeToCommunity = async (
   if (!changed) return;
 
   try {
-    await firestore().collection("community_intervals").doc(key).set(
+    await setDoc(
+      doc(db, "community_intervals", key),
       {
         make: vehicle.make,
         model: vehicle.model,
@@ -406,7 +420,7 @@ export const contributeToCommunity = async (
         vehicleType: vehicle.type,
         makeModelYear: key,
         intervals: intervalsUpdate,
-        updatedAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: serverTimestamp(),
       },
       { merge: true },
     );
@@ -439,12 +453,9 @@ export const getCommunityIntervals = async (
   if (!isCloudUser()) return [];
   const key = makeModelYearKey(make, model, year);
   try {
-    const doc = await firestore()
-      .collection("community_intervals")
-      .doc(key)
-      .get();
-    if (!doc.exists) return [];
-    const intervals = doc.data()?.intervals ?? {};
+    const snap = await getDoc(doc(db, "community_intervals", key));
+    if (!snap.exists()) return [];
+    const intervals = snap.data()?.intervals ?? {};
     const out: CommunityInterval[] = [];
     Object.keys(intervals).forEach((serviceType) => {
       const { count, sum } = intervals[serviceType] ?? {};
