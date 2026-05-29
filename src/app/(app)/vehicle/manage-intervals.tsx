@@ -1,19 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
-  KeyboardAvoidingView, Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import type { Vehicle, ServiceInterval } from '@/types';
-import { getVehicles, updateVehicle } from '@/lib/storage';
-import { getBaseIntervals } from '@/lib/serviceIntervals';
-import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
-import { theme } from '@/theme';
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import type { Vehicle, ServiceInterval } from "@/types";
+import { getBaseIntervals } from "@/lib/serviceIntervals";
+import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
+import { theme } from "@/theme";
+import { /* existing... */ Switch } from "react-native";
+import {
+  getVehicles,
+  updateVehicle,
+  getShareCommunityData,
+  setShareCommunityData,
+  contributeToCommunity,
+} from "@/lib/storage";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ManageIntervalsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [shareData, setShareData] = useState(false);
   const { id: vehicleId } = useLocalSearchParams<{ id: string }>();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
 
@@ -21,21 +37,21 @@ export default function ManageIntervalsScreen() {
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   // custom service types user is adding
   const [customs, setCustoms] = useState<ServiceInterval[]>([]);
-  const [newName, setNewName] = useState('');
-  const [newKm, setNewKm] = useState('');
-  const [error, setError] = useState('');
+  const [newName, setNewName] = useState("");
+  const [newKm, setNewKm] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
       if (!vehicleId) return;
       const all = await getVehicles();
-      const v = all.find((x) => x.id === vehicleId);
+      const v = all?.find((x) => x?.id === vehicleId);
       if (v) {
         setVehicle(v);
         const init: Record<string, string> = {};
         getBaseIntervals(v.type).forEach((iv) => {
-          init[iv.serviceType] = String(
-            v.customIntervals?.[iv.serviceType] ?? iv.intervalKm
+          init[iv?.serviceType] = String(
+            v?.customIntervals?.[iv.serviceType] ?? iv?.intervalKm,
           );
         });
         setOverrides(init);
@@ -44,25 +60,38 @@ export default function ManageIntervalsScreen() {
     })();
   }, [vehicleId]);
 
+  useEffect(() => {
+    getShareCommunityData()?.then(setShareData);
+  }, []);
   const addCustom = () => {
-    setError('');
-    if (!newName.trim()) { setError('Enter a service name'); return; }
+    setError("");
+    if (!newName.trim()) {
+      setError("Enter a service name");
+      return;
+    }
     const km = parseFloat(newKm);
-    if (isNaN(km) || km <= 0) { setError('Enter a valid interval in km'); return; }
-    if (customs.some(c => c.serviceType === newName.trim())) {
-      setError('A custom service with that name already exists');
+    if (isNaN(km) || km <= 0) {
+      setError("Enter a valid interval in km");
+      return;
+    }
+    if (customs.some((c) => c.serviceType === newName.trim())) {
+      setError("A custom service with that name already exists");
       return;
     }
     setCustoms([
       ...customs,
-      { serviceType: newName.trim(), intervalKm: km, description: 'Custom service' },
+      {
+        serviceType: newName.trim(),
+        intervalKm: km,
+        description: "Custom service",
+      },
     ]);
-    setNewName('');
-    setNewKm('');
+    setNewName("");
+    setNewKm("");
   };
 
   const removeCustom = (name: string) => {
-    setCustoms(customs.filter(c => c.serviceType !== name));
+    setCustoms(customs.filter((c) => c.serviceType !== name));
   };
 
   const save = async () => {
@@ -78,12 +107,15 @@ export default function ManageIntervalsScreen() {
       }
     });
 
-    await updateVehicle({
+    const updated = {
       ...vehicle,
-      customIntervals: Object.keys(customIntervals).length ? customIntervals : undefined,
+      customIntervals: Object.keys(customIntervals).length
+        ? customIntervals
+        : undefined,
       customServiceTypes: customs.length ? customs : undefined,
-    });
-
+    };
+    await updateVehicle(updated);
+    contributeToCommunity(updated).catch(() => {}); // best-effort, don't block
     router.back();
   };
 
@@ -98,9 +130,9 @@ export default function ManageIntervalsScreen() {
   const base = getBaseIntervals(vehicle.type);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
         <View style={styles.header}>
@@ -114,8 +146,30 @@ export default function ManageIntervalsScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll}>
+          {user && !user.isGuest && (
+            <View style={styles?.shareRow}>
+              <View style={{ flex: 1, marginRight: theme.spacing.md }}>
+                <Text style={styles.rowLabel}>
+                  Share my intervals anonymously
+                </Text>
+                <Text style={styles.rowDesc}>
+                  Help other owners of this vehicle. Only the numbers are shared
+                  — never your name, location, or odometer.
+                </Text>
+              </View>
+              <Switch
+                value={shareData}
+                onValueChange={async (v) => {
+                  setShareData(v);
+                  await setShareCommunityData(v);
+                }}
+              />
+            </View>
+          )}
           <Text style={styles.section}>STANDARD SERVICES</Text>
-          <Text style={styles.hint}>Override how often each service is needed (in km).</Text>
+          <Text style={styles.hint}>
+            Override how often each service is needed (in km).
+          </Text>
           {base.map((iv) => (
             <View key={iv.serviceType} style={styles.row}>
               <View style={{ flex: 1 }}>
@@ -123,7 +177,7 @@ export default function ManageIntervalsScreen() {
                 <Text style={styles.rowDesc}>{iv.description}</Text>
               </View>
               <Input
-                value={overrides[iv.serviceType] ?? ''}
+                value={overrides[iv.serviceType] ?? ""}
                 onChangeText={(t) =>
                   setOverrides({ ...overrides, [iv.serviceType]: t })
                 }
@@ -138,14 +192,17 @@ export default function ManageIntervalsScreen() {
             CUSTOM SERVICES & PARTS
           </Text>
           <Text style={styles.hint}>
-            Add custom services for modifications (new tires, brake upgrades, etc.).
+            Add custom services for modifications (new tires, brake upgrades,
+            etc.).
           </Text>
 
           {customs.map((c) => (
             <View key={c.serviceType} style={styles.customRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowLabel}>{c.serviceType}</Text>
-                <Text style={styles.rowDesc}>Every {c.intervalKm.toLocaleString()} km</Text>
+                <Text style={styles.rowDesc}>
+                  Every {c.intervalKm.toLocaleString()} km
+                </Text>
               </View>
               <TouchableOpacity onPress={() => removeCustom(c.serviceType)}>
                 <Text style={styles.removeText}>Remove</Text>
@@ -168,7 +225,12 @@ export default function ManageIntervalsScreen() {
               placeholder="e.g. 40000"
             />
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            <Button title="+ Add Service" onPress={addCustom} variant="secondary" fullWidth />
+            <Button
+              title="+ Add Service"
+              onPress={addCustom}
+              variant="secondary"
+              fullWidth
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -180,9 +242,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   loading: { color: theme.colors.textPrimary, padding: 20 },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
@@ -208,9 +270,17 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     marginBottom: theme.spacing.md,
   },
+  shareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.bgCard,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    marginBottom: theme.spacing.lg,
+  },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.bgCard,
     padding: theme.spacing.md,
     borderRadius: theme.radius.md,
@@ -218,8 +288,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   customRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.bgCard,
     padding: theme.spacing.md,
     borderRadius: theme.radius.md,
@@ -235,7 +305,10 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xs,
     marginTop: 2,
   },
-  removeText: { color: theme.colors.danger, fontWeight: theme.fontWeight.semibold },
+  removeText: {
+    color: theme.colors.danger,
+    fontWeight: theme.fontWeight.semibold,
+  },
   addBox: {
     backgroundColor: theme.colors.bgCard,
     padding: theme.spacing.md,

@@ -1,15 +1,15 @@
-export type VehicleType = 'car' | 'motorbike';
+export type VehicleType = "car" | "motorbike";
 
 export interface User {
   id: string;
-  username: string;
-  passwordHash: string;
+  username?: string;
+  passwordHash?: string;
   isGuest: boolean;
   createdAt: string;
 }
 
 export interface Vehicle {
-  id: string;
+  id?: string;
   userId: string;
   type: VehicleType;
   make: string;
@@ -25,9 +25,8 @@ export interface Vehicle {
   estimation?: VehicleEstimation;
 }
 
-
-export interface VehicleEstimation{
-  status: 'pending_observation' | 'complete' | 'manual';
+export interface VehicleEstimation {
+  status: "pending_observation" | "complete" | "manual";
   roughIntervalMonths: number;
   observationStartedAt: string;
   observationStartOdometer: number;
@@ -44,8 +43,8 @@ export interface ServiceRecord {
   date?: string;
   notes?: string;
   cost?: number;
-  nextDueOdometer?:number;
-  nextDueDate?:string;
+  nextDueOdometer?: number;
+  nextDueDate?: string;
 }
 
 export interface ServiceInterval {
@@ -64,7 +63,7 @@ export interface Trip {
   startOdometer: number;
   endOdometer?: number;
   isActive: boolean;
-  source?: 'manual' | 'passive';
+  source?: "manual" | "passive";
 }
 
 // ============================================================================
@@ -72,13 +71,13 @@ export interface Trip {
 // ============================================================================
 
 export type DetectionState =
-  | 'idle'
-  | 'monitoring'
-  | 'moving'
-  | 'driving'
-  | 'stopped'
-  | 'validating'
-  | 'awaiting_confirmation';
+  | "idle"
+  | "monitoring"
+  | "moving"
+  | "driving"
+  | "stopped"
+  | "validating"
+  | "awaiting_confirmation";
 
 export interface LocationSnapshot {
   id: string;
@@ -99,7 +98,7 @@ export interface PendingTrip {
   snapshots: LocationSnapshot[];
   averageSpeedKmh: number;
   maxSpeedKmh: number;
-  status: 'awaiting_confirmation' | 'confirmed' | 'rejected';
+  status: "awaiting_confirmation" | "confirmed" | "rejected";
   createdAt: string;
 }
 
@@ -135,15 +134,13 @@ export type RootStackParamList = {
   TrackTrip: undefined;
   AddService: undefined;
   ConfirmTrip: undefined;
-  
 
   PassiveDetection: undefined;
 };
 
-
 export interface User {
-  id: string;            // Firebase uid for cloud users, 'guest_<uuid>' for guests
-  email: string | null;  // null for guests
+  id: string; // Firebase uid for cloud users, 'guest_<uuid>' for guests
+  email: string | null; // null for guests
   displayName: string | null;
   isGuest: boolean;
   createdAt: string;

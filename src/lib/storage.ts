@@ -310,3 +310,150 @@ export const stripUndefined = <T extends Record<string, any>>(obj: T): T => {
   });
   return out as T;
 };
+
+// ===================== COMMUNITY DATA SHARING (opt-in) =====================
+const COMMUNITY_KEYS = {
+  OPT_IN: "@st_share_community_data",
+  CONTRIBUTED: "@st_community_contributed",
+};
+const VALID_MIN_KM = 200;
+const VALID_MAX_KM = 300000;
+
+export const getShareCommunityData = async (): Promise<boolean> => {
+  const raw = await AsyncStorage.getItem(COMMUNITY_KEYS.OPT_IN);
+  return raw === "true";
+};
+
+export const setShareCommunityData = async (
+  enabled: boolean,
+): Promise<void> => {
+  await AsyncStorage.setItem(COMMUNITY_KEYS.OPT_IN, enabled ? "true" : "false");
+};
+
+const makeModelYearKey = (make: string, model: string, year: number): string =>
+  `${make}_${model}_${year}`
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+
+const getContributedMap = async (): Promise<
+  Record<string, Record<string, number>>
+> => {
+  const raw = await AsyncStorage.getItem(COMMUNITY_KEYS.CONTRIBUTED);
+  return raw ? JSON.parse(raw) : {};
+};
+
+const saveContributedMap = async (
+  map: Record<string, Record<string, number>>,
+): Promise<void> => {
+  await AsyncStorage.setItem(COMMUNITY_KEYS.CONTRIBUTED, JSON.stringify(map));
+};
+
+// Best-effort: shares the vehicle's OVERRIDDEN standard intervals anonymously.
+// Uses local delta tracking so re-saves/edits never double-count. Never throws.
+export const contributeToCommunity = async (
+  vehicle: Vehicle,
+): Promise<void> => {
+  if (!isCloudUser()) return; // only authed users
+  if (!(await getShareCommunityData())) return; // only if opted in
+
+  const key = makeModelYearKey(vehicle.make, vehicle.model, vehicle.year);
+  if (!key) return;
+
+  const overrides = vehicle.customIntervals ?? {};
+  const map = await getContributedMap();
+  const prev = map[vehicle.id] ?? {};
+
+  const intervalsUpdate: Record<string, any> = {};
+  let changed = false;
+  const allTypes = new Set([...Object.keys(overrides), ...Object.keys(prev)]);
+
+  allTypes.forEach((serviceType) => {
+    const newVal = overrides[serviceType];
+    const oldVal = prev[serviceType];
+    if (newVal != null && (newVal < VALID_MIN_KM || newVal > VALID_MAX_KM))
+      return;
+
+    if (newVal != null && oldVal == null) {
+      intervalsUpdate[serviceType] = {
+        count: firestore.FieldValue.increment(1),
+        sum: firestore.FieldValue.increment(newVal),
+      };
+      changed = true;
+    } else if (newVal != null && oldVal != null && newVal !== oldVal) {
+      intervalsUpdate[serviceType] = {
+        sum: firestore.FieldValue.increment(newVal - oldVal),
+      };
+      changed = true;
+    } else if (newVal == null && oldVal != null) {
+      intervalsUpdate[serviceType] = {
+        count: firestore.FieldValue.increment(-1),
+        sum: firestore.FieldValue.increment(-oldVal),
+      };
+      changed = true;
+    }
+  });
+
+  if (!changed) return;
+
+  try {
+    await firestore().collection("community_intervals").doc(key).set(
+      {
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        vehicleType: vehicle.type,
+        makeModelYear: key,
+        intervals: intervalsUpdate,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    // record what we've now contributed for this vehicle
+    const newPrev: Record<string, number> = {};
+    Object.keys(overrides).forEach((st) => {
+      const v = overrides[st];
+      if (v >= VALID_MIN_KM && v <= VALID_MAX_KM) newPrev[st] = v;
+    });
+    map[vehicle.id] = newPrev;
+    await saveContributedMap(map);
+  } catch (err) {
+    console.warn("[community] contribute failed:", err); // never block the user
+  }
+};
+
+// READ SIDE — ready for the suggestion UI you'll add later.
+export interface CommunityInterval {
+  serviceType: string;
+  meanKm: number;
+  count: number;
+}
+
+export const getCommunityIntervals = async (
+  make: string,
+  model: string,
+  year: number,
+): Promise<CommunityInterval[]> => {
+  if (!isCloudUser()) return [];
+  const key = makeModelYearKey(make, model, year);
+  try {
+    const doc = await firestore()
+      .collection("community_intervals")
+      .doc(key)
+      .get();
+    if (!doc.exists) return [];
+    const intervals = doc.data()?.intervals ?? {};
+    const out: CommunityInterval[] = [];
+    Object.keys(intervals).forEach((serviceType) => {
+      const { count, sum } = intervals[serviceType] ?? {};
+      if (count > 0)
+        out.push({ serviceType, meanKm: Math.round(sum / count), count });
+    });
+    return out;
+  } catch (err) {
+    console.warn("[community] read failed:", err);
+    return [];
+  }
+};

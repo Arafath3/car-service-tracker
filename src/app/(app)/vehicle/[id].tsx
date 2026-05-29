@@ -101,7 +101,7 @@ export default function VehicleDetailScreen() {
     );
   }
 
-  const totalDistance = vehicle.currentOdometer - vehicle.startingOdometer;
+  const totalDistance = trips.reduce((sum, t) => sum + t.distanceKm, 0);
   const totalTrips = trips.length;
   const totalServices = services.length;
   const overdueCount = statuses.filter((s) => s.status === "overdue").length;
@@ -282,7 +282,7 @@ export default function VehicleDetailScreen() {
             title="⚙ Manage Service Intervals"
             onPress={() =>
               router.push({
-                pathname: "./(app)/vehicle/manage-intervals",
+                pathname: "/(app)/vehicle/manage-intervals",
                 params: { id: vehicle.id },
               })
             }
