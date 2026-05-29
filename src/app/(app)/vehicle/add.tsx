@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import "react-native-get-random-values";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { addVehicle } from "@/lib/storage";
@@ -31,7 +30,6 @@ export default function AddVehicleScreen() {
 
   const handleSave = async () => {
     setError("");
-
     if (!make.trim() || !model.trim() || !year.trim() || !odometer.trim()) {
       setError("Please fill in make, model, year, and odometer");
       return;
@@ -48,42 +46,53 @@ export default function AddVehicleScreen() {
     }
 
     setSaving(true);
-    const newId = await addVehicle({
-      type,
-      make: make.trim(),
-      model: model.trim(),
-      year: yearNum,
-      nickname: nickname.trim() || undefined,
-      currentOdometer: odoNum,
-      startingOdometer: odoNum,
-      createdAt: new Date().toISOString(),
-    });
-    setSaving(false);
+    try {
+      const newId = await addVehicle({
+        type,
+        make: make.trim(),
+        model: model.trim(),
+        year: yearNum,
+        nickname: nickname.trim() || undefined,
+        currentOdometer: odoNum,
+        startingOdometer: odoNum,
+        createdAt: new Date().toISOString(),
+      });
+      setSaving(false);
 
-    Alert.alert(
-      "Vehicle added!",
-      "Do you know when this car was last serviced?",
-      [
-        {
-          text: "Not sure — estimate",
-          onPress: () =>
-            router.replace({
-              pathname: "./(app)/vehicle/rough-estimate",
-              params: { id: newId },
-            }),
-        },
-        {
-          text: "Yes, I know",
-          onPress: () =>
-            router.replace({
-              pathname: "/(app)/vehicle/add-service",
-              params: { id: newId },
-            }),
-        },
-        { text: "Skip", onPress: () => router.back() },
-      ],
-    );
-    router.back();
+      Alert.alert(
+        "Vehicle added!",
+        "Do you know when this car was last serviced?",
+        [
+          {
+            text: "Not sure — estimate",
+            onPress: () =>
+              router.replace({
+                pathname: "./(app)/vehicle/rough-estimate",
+                params: { id: newId },
+              }),
+          },
+          {
+            text: "Yes, I know",
+            onPress: () =>
+              router.replace({
+                pathname: "/(app)/vehicle/add-service",
+                params: { id: newId },
+              }),
+          },
+          { text: "Skip", onPress: () => router.back() },
+        ],
+      );
+    } catch (err: any) {
+      setSaving(false);
+      console.error("[AddVehicle] save failed:", err);
+      if (err?.code === "firestore/permission-denied") {
+        setError(
+          "Cloud save denied. Check your Firestore security rules (or sign out and use guest mode to test).",
+        );
+      } else {
+        setError(err?.message || "Could not save vehicle. Please try again.");
+      }
+    }
   };
 
   return (
@@ -252,6 +261,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
 });

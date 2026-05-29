@@ -119,6 +119,40 @@ export default function VehicleDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {vehicle.estimation?.status === "pending_observation" && (
+          <View
+            style={{
+              backgroundColor: theme.colors.bgCard,
+              borderLeftWidth: 3,
+              borderLeftColor: theme.colors.accent,
+              padding: theme.spacing.md,
+              borderRadius: theme.radius.md,
+              marginTop: theme.spacing.md,
+            }}
+          >
+            <Text
+              style={{
+                color: theme.colors.accent,
+                fontSize: theme.fontSize.xs,
+                fontWeight: theme.fontWeight.bold,
+                letterSpacing: 2,
+              }}
+            >
+              REFINING ESTIMATE
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.textPrimary,
+                fontSize: theme.fontSize.sm,
+                marginTop: 4,
+              }}
+            >
+              We're learning your driving habits. Reminders use a rough estimate
+              for now.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.hero}>
           <Text style={styles.heroEmoji}>
             {vehicle.type === "car" ? "🚗" : "🏍️"}

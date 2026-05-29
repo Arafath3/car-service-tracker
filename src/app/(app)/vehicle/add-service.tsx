@@ -25,10 +25,11 @@ export default function AddServiceScreen() {
   const [odometer, setOdometer] = useState("");
   const [cost, setCost] = useState("");
   const [notes, setNotes] = useState("");
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [nextDueOdometer, setNextDueOdometer] = useState("");
   const [nextDueDate, setNextDueDate] = useState(""); // YYYY-MM-DD
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     (async () => {
       if (!vehicleId) return;
@@ -60,29 +61,39 @@ export default function AddServiceScreen() {
     }
 
     const nextOdo = nextDueOdometer ? parseFloat(nextDueOdometer) : undefined;
-    const nextDate = nextDueDate.trim() || undefined;
     if (nextOdo != null && (isNaN(nextOdo) || nextOdo < odoNum)) {
-      setError("Next service km must be greater than current odometer");
+      setError("Next service km must be greater than the current odometer");
       return;
     }
+    const nextDate = nextDueDate.trim() || undefined;
     if (nextDate && isNaN(new Date(nextDate).getTime())) {
-      setError("Enter date as YYYY-MM-DD");
+      setError("Enter the date as YYYY-MM-DD");
       return;
     }
 
     setSaving(true);
-    await addService({
-      vehicleId: vehicleId!,
-      serviceType,
-      odometer: odoNum,
-      date: new Date().toISOString(),
-      notes: notes.trim() || undefined,
-      cost: costNum,
-      nextDueOdometer: nextOdo,
-      nextDueDate: nextDate ? new Date(nextDate).toISOString() : undefined,
-    });
-    setSaving(false);
-    router.back();
+    try {
+      await addService({
+        vehicleId: vehicleId!,
+        serviceType,
+        odometer: odoNum,
+        date: new Date().toISOString(),
+        notes: notes.trim() || undefined,
+        cost: costNum,
+        nextDueOdometer: nextOdo,
+        nextDueDate: nextDate ? new Date(nextDate).toISOString() : undefined,
+      });
+      setSaving(false);
+      router.back();
+    } catch (err: any) {
+      setSaving(false);
+      console.error("[AddService] save failed:", err);
+      if (err?.code === "firestore/permission-denied") {
+        setError("Cloud save denied. Check your Firestore security rules.");
+      } else {
+        setError(err?.message || "Could not save service. Please try again.");
+      }
+    }
   };
 
   if (!vehicle) {
@@ -94,7 +105,7 @@ export default function AddServiceScreen() {
       </SafeAreaView>
     );
   }
-  // flag
+
   const intervals = getServiceIntervals(vehicle);
 
   return (
@@ -164,19 +175,9 @@ export default function AddServiceScreen() {
             style={{ minHeight: 80, textAlignVertical: "top" }}
           />
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              fontSize: theme.fontSize.xs,
-              fontWeight: theme.fontWeight.bold,
-              letterSpacing: 2,
-              marginTop: theme.spacing.lg,
-            }}
-          >
+          <Text style={[styles.sectionLabel, { marginTop: theme.spacing.lg }]}>
             FROM MECHANIC STICKER (OPTIONAL)
           </Text>
-
           <Input
             label="Next service due at (km)"
             value={nextDueOdometer}
@@ -184,7 +185,6 @@ export default function AddServiceScreen() {
             keyboardType="numeric"
             placeholder="e.g. 165000"
           />
-
           <Input
             label="Next service due by (YYYY-MM-DD)"
             value={nextDueDate}
@@ -192,6 +192,8 @@ export default function AddServiceScreen() {
             placeholder="e.g. 2026-12-15"
             autoCapitalize="none"
           />
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <Button
             title="Save Service Record"
