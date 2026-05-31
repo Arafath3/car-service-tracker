@@ -47,6 +47,7 @@ class BluetoothDetectionModule : Module() {
 
     receiver = object : BroadcastReceiver() {
       override fun onReceive(ctx: Context?, intent: Intent?) {
+        android.util.Log.d("BT_NATIVE", "onReceive fired! action=${intent?.action}")
         val action = intent?.action ?: return
         val device: BluetoothDevice? =
           intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
@@ -75,6 +76,7 @@ class BluetoothDetectionModule : Module() {
     }
 
     context.registerReceiver(receiver, filter)
+    android.util.Log.d("BT_NATIVE", "Receiver registered successfully")
   }
 
   private fun unregisterReceiver() {

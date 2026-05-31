@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-
+<!-- 
   <application>
     <receiver
       android:name=".BluetoothConnectionReceiver"
@@ -11,6 +11,6 @@
         <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
       </intent-filter>
     </receiver>
-  </application>
+  </application> -->
 
 </manifest>

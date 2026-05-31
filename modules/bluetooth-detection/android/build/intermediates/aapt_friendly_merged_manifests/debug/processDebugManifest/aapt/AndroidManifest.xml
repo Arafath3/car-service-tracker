@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="expo.modules.bluetoothdetection" >
-
+    <!--
+  <application>
+    <receiver
+      android:name=".BluetoothConnectionReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+        <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+      </intent-filter>
+    </receiver>
+  </application>
+    -->
     <uses-sdk android:minSdkVersion="24" />
 
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-
-    <application>
-        <receiver
-            android:name="expo.modules.bluetoothdetection.BluetoothConnectionReceiver"
-            android:exported="true" >
-            <intent-filter>
-                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
-                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
-            </intent-filter>
-        </receiver>
-    </application>
 
 </manifest>

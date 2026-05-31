@@ -1,4 +1,7 @@
 import React, { useState, useCallback } from "react";
+import { PermissionsAndroid, Platform } from "react-native";
+import BluetoothDetection from "@/../modules/bluetooth-detection/src/BluetoothDetectionModule";
+
 import {
   View,
   Text,
@@ -12,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import type { Vehicle, DetectionState, PendingTrip } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useEffect } from "react";
 import {
   getVehicles,
   getDetectionContext,
@@ -216,6 +220,58 @@ export default function PassiveDetectionScreen() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
+  // bluetooth
+  useEffect(() => {
+    let connectedSub: any;
+    let disconnectedSub: any;
+
+    const start = async () => {
+      if (Platform.OS === "android" && Platform.Version >= 31) {
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        );
+        console.log("[BT] permission result:", result);
+        if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.log(
+            "[BT] permission NOT granted — broadcasts will be blocked",
+          );
+          return;
+        }
+      }
+
+      BluetoothDetection.startListening();
+      console.log("[BT] Listening for Bluetooth connections...");
+
+      connectedSub = BluetoothDetection.addListener(
+        "onBluetoothConnected",
+        (device) => {
+          console.log(
+            "[BT] CONNECTED:",
+            device?.name ?? "Unknown",
+            device?.address ?? "Unknown",
+          );
+        },
+      );
+      disconnectedSub = BluetoothDetection.addListener(
+        "onBluetoothDisconnected",
+        (device) => {
+          console.log(
+            "[BT] DISCONNECTED:",
+            device?.name ?? "Unknow",
+            device?.address ?? "Unknow",
+          );
+        },
+      );
+    };
+
+    start();
+
+    return () => {
+      BluetoothDetection.stopListening();
+      connectedSub?.remove();
+      disconnectedSub?.remove();
+    };
+  }, []);
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.headerBar}>
