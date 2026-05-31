@@ -73,7 +73,7 @@ export default function PassiveDetectionScreen() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
     null,
   );
-  const [enabled, setEnabled] = useState(false);
+  const [activeVehicleId, setActiveVehicleId] = useState<string | null>(null);
   const [state, setState] = useState<DetectionState>("idle");
   const [snapshotCount, setSnapshotCount] = useState(0);
   const [accumulatedKm, setAccumulatedKm] = useState(0);
@@ -85,6 +85,8 @@ export default function PassiveDetectionScreen() {
   const [busy, setBusy] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const isSelectedActive =
+    !!selectedVehicleId && selectedVehicleId === activeVehicleId;
 
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
@@ -118,14 +120,21 @@ export default function PassiveDetectionScreen() {
         setState(ctx.state);
         setSnapshotCount(ctx.totalSnapshotsTaken);
         setAccumulatedKm(ctx.accumulatedDistanceKm);
-        if (active && ctx.selectedVehicleId)
-          setSelectedVehicleId(ctx.selectedVehicleId);
+        // default selection on first load, but never override the user's choice
+        setSelectedVehicleId((prev) => prev ?? ctx.selectedVehicleId ?? null);
       } else {
         setState("idle");
       }
     }
 
-    if (!activeError && active !== null) setEnabled(active);
+    // only one vehicle can be active at a time
+    if (!activeError) {
+      setActiveVehicleId(
+        active && ctx?.selectedVehicleId ? ctx.selectedVehicleId : null,
+      );
+    }
+
+    if (!activeError && active !== null) setActiveVehicleId(selectedVehicleId);
 
     if (!cfgError && cfg) setDemoMode(cfg.drivingMinKmh < 10);
 
@@ -176,7 +185,7 @@ export default function PassiveDetectionScreen() {
       setBusy(false);
       return;
     }
-    setEnabled(true);
+    setActiveVehicleId(selectedVehicleId);
     setAlertConfig({
       title: "Detection Active",
       message:
@@ -208,7 +217,7 @@ export default function PassiveDetectionScreen() {
     } else {
       setBusy(true);
       await stopPassiveDetection();
-      setEnabled(false);
+      setActiveVehicleId(null);
       await refreshTelemetry();
       setBusy(false);
     }
@@ -371,56 +380,64 @@ export default function PassiveDetectionScreen() {
             Add a vehicle first from the home screen.
           </Text>
         ) : (
-          vehicles.map((v) => (
-            <TouchableOpacity
-              key={v.id}
-              style={[
-                styles.vehicleItem,
-                selectedVehicleId === v.id && styles.vehicleItemActive,
-              ]}
-              onPress={() => !enabled && setSelectedVehicleId(v.id)}
-              activeOpacity={enabled ? 1 : 0.85}
-              disabled={enabled}
-            >
-              <Text style={styles.vehicleEmoji}>
-                {v.type === "car" ? "🚗" : "🏍️"}
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.vehicleName}>
-                  {v.nickname || `${v.make} ${v.model}`}
-                </Text>
-                <Text style={styles.vehicleSub}>
-                  {v.year} · {v.currentOdometer.toLocaleString()} km
-                </Text>
-              </View>
-              <View
+          vehicles.map((v) => {
+            const tracking = v.id === activeVehicleId;
+            return (
+              <TouchableOpacity
+                key={v.id}
                 style={[
-                  styles.radio,
-                  selectedVehicleId === v.id && styles.radioActive,
+                  styles.vehicleItem,
+                  selectedVehicleId === v.id && styles.vehicleItemActive,
                 ]}
-              />
-            </TouchableOpacity>
-          ))
+                onPress={() => setSelectedVehicleId(v.id)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.vehicleEmoji}>
+                  {v.type === "car" ? "🚗" : "🏍️"}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.vehicleName}>
+                    {v.nickname || `${v.make} ${v.model}`}
+                  </Text>
+                  <Text style={styles.vehicleSub}>
+                    {v.year} · {v.currentOdometer.toLocaleString()} km
+                  </Text>
+                </View>
+                {tracking && (
+                  <View style={styles.trackingBadge}>
+                    <Text style={styles.trackingText}>● TRACKING</Text>
+                  </View>
+                )}
+                <View
+                  style={[
+                    styles.radio,
+                    selectedVehicleId === v.id && styles.radioActive,
+                  ]}
+                />
+              </TouchableOpacity>
+            );
+          })
         )}
 
         <View style={styles.toggleCard}>
           <View style={{ flex: 1, marginRight: theme.spacing.md }}>
             <Text style={styles.toggleTitle}>Background Detection</Text>
             <Text style={styles.toggleSubtitle}>
-              {enabled
-                ? "Active — close app and drive to test"
-                : "Toggle on to start monitoring"}
+              {isSelectedActive
+                ? "Active for this vehicle — close app and drive"
+                : "Toggle on to track the selected vehicle"}
             </Text>
           </View>
+
           <Switch
-            value={enabled}
+            value={isSelectedActive}
             onValueChange={handleToggle}
             disabled={busy || vehicles.length === 0 || !selectedVehicleId}
             trackColor={{
               false: theme.colors.border,
               true: theme.colors.accent,
             }}
-            thumbColor={enabled ? "#fff" : theme.colors.textMuted}
+            thumbColor={isSelectedActive ? "#fff" : theme.colors.textMuted}
           />
         </View>
 
@@ -865,5 +882,16 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.semibold,
+  },
+  trackingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: theme.spacing.sm,
+  },
+  trackingText: {
+    color: theme.colors.success,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.bold,
+    letterSpacing: 0.5,
   },
 });
