@@ -8,6 +8,8 @@ import {
   Switch,
   RefreshControl,
 } from "react-native";
+import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import type { Vehicle, DetectionState, PendingTrip } from "@/types";
@@ -24,11 +26,12 @@ import {
   getAwaitingConfirmation,
   getDetectionConfig,
   saveDetectionConfig,
+  getAutoDetectionEnabled,
+  setAutoDetectionEnabled,
   DEFAULT_DETECTION_CONFIG,
   DEMO_DETECTION_CONFIG,
 } from "@/lib/storage";
 import {
-  startPassiveDetection,
   stopPassiveDetection,
   isPassiveDetectionActive,
 } from "@/lib/passiveDetectionService";
@@ -70,9 +73,6 @@ export default function PassiveDetectionScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
-    null,
-  );
   const [activeVehicleId, setActiveVehicleId] = useState<string | null>(null);
   const [state, setState] = useState<DetectionState>("idle");
   const [snapshotCount, setSnapshotCount] = useState(0);
@@ -85,8 +85,8 @@ export default function PassiveDetectionScreen() {
   const [busy, setBusy] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  const isSelectedActive =
-    !!selectedVehicleId && selectedVehicleId === activeVehicleId;
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [linkingVehicleId, setLinkingVehicleId] = useState<string | null>(null);
 
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
@@ -120,21 +120,18 @@ export default function PassiveDetectionScreen() {
         setState(ctx.state);
         setSnapshotCount(ctx.totalSnapshotsTaken);
         setAccumulatedKm(ctx.accumulatedDistanceKm);
-        // default selection on first load, but never override the user's choice
-        setSelectedVehicleId((prev) => prev ?? ctx.selectedVehicleId ?? null);
       } else {
         setState("idle");
       }
     }
 
-    // only one vehicle can be active at a time
     if (!activeError) {
       setActiveVehicleId(
         active && ctx?.selectedVehicleId ? ctx.selectedVehicleId : null,
       );
     }
 
-    if (!activeError && active !== null) setActiveVehicleId(selectedVehicleId);
+    setAutoEnabled(await getAutoDetectionEnabled());
 
     if (!cfgError && cfg) setDemoMode(cfg.drivingMinKmh < 10);
 
@@ -144,8 +141,14 @@ export default function PassiveDetectionScreen() {
   }, [user?.id]);
 
   const refreshTelemetry = useCallback(async () => {
-    const [[ctxError, ctx], [logError, log], [pError, p]] = await Promise.all([
+    const [
+      [ctxError, ctx],
+      [activeError, active],
+      [logError, log],
+      [pError, p],
+    ] = await Promise.all([
       safeAwait(getDetectionContext()),
+      safeAwait(isPassiveDetectionActive()),
       safeAwait(getStateLog()),
       safeAwait(getAwaitingConfirmation()),
     ]);
@@ -154,14 +157,19 @@ export default function PassiveDetectionScreen() {
       setSnapshotCount(ctx.totalSnapshotsTaken);
       setAccumulatedKm(ctx.accumulatedDistanceKm);
     }
+    if (!activeError) {
+      setActiveVehicleId(
+        active && ctx?.selectedVehicleId ? ctx.selectedVehicleId : null,
+      );
+    }
     if (!logError && log) setStateLog(log.reverse());
     if (!pError && p) setPending(p);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadData(); // full sync once, on focus
-      const interval = setInterval(refreshTelemetry, 3000); // only telemetry every 3s
+      loadData();
+      const interval = setInterval(refreshTelemetry, 3000);
       return () => clearInterval(interval);
     }, [loadData, refreshTelemetry]),
   );
@@ -172,63 +180,57 @@ export default function PassiveDetectionScreen() {
     setRefreshing(false);
   };
 
-  // Does the actual start; called when already linked, or after pick/skip.
-  const startDetectionFor = async () => {
-    if (!selectedVehicleId) return;
+  const handleAutoToggle = async (next: boolean) => {
+    if (busy) return;
     setBusy(true);
-    const result = await startPassiveDetection(selectedVehicleId);
-    if (!result.success) {
+
+    if (next) {
+      const fg = await Location.requestForegroundPermissionsAsync();
+      if (fg.status !== "granted") {
+        setAlertConfig({
+          title: "Location needed",
+          message:
+            "Automatic detection needs location permission to track trips.",
+        });
+        setBusy(false);
+        return;
+      }
+      const bg = await Location.requestBackgroundPermissionsAsync();
+      if (bg.status !== "granted") {
+        setAlertConfig({
+          title: "Background location needed",
+          message:
+            'Please allow location "All the time" so trips can be detected while the app is in the background.',
+        });
+        setBusy(false);
+        return;
+      }
+      await Notifications.requestPermissionsAsync();
+      await setAutoDetectionEnabled(true);
+      setAutoEnabled(true);
       setAlertConfig({
-        title: "Could not start detection",
-        message: result.error || "Unknown error",
+        title: "Automatic detection on",
+        message:
+          "Trips will start automatically when you connect to a linked vehicle's Bluetooth.",
       });
-      setBusy(false);
-      return;
+    } else {
+      await setAutoDetectionEnabled(false);
+      setAutoEnabled(false);
+      await stopPassiveDetection();
+      setActiveVehicleId(null);
     }
-    setActiveVehicleId(selectedVehicleId);
-    setAlertConfig({
-      title: "Detection Active",
-      message:
-        "The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.",
-    });
+
     await refreshTelemetry();
     setBusy(false);
   };
 
-  const handleToggle = async (next: boolean) => {
-    if (busy) return;
-
-    if (next) {
-      if (!selectedVehicleId) {
-        setAlertConfig({
-          title: "Select a vehicle",
-          message: "Please select which vehicle to track first.",
-        });
-        return;
-      }
-      const vehicle = vehicles.find((v) => v.id === selectedVehicleId);
-      if (vehicle?.bluetoothAddress) {
-        // already linked → start straight away
-        await startDetectionFor();
-      } else {
-        // not linked yet → ask which Bluetooth first
-        setShowPicker(true);
-      }
-    } else {
-      setBusy(true);
-      await stopPassiveDetection();
-      setActiveVehicleId(null);
-      await refreshTelemetry();
-      setBusy(false);
-    }
-  };
-
   const handlePickDevice = async (device: PairedDevice) => {
     setShowPicker(false);
-    if (selectedVehicle) {
+    const vehicle = vehicles.find((v) => v.id === linkingVehicleId);
+    if (vehicle) {
       const [err] = await safeAwait(
         updateVehicle({
-          ...selectedVehicle,
+          ...vehicle,
           bluetoothAddress: device.address,
           bluetoothName: device.name,
         }),
@@ -238,20 +240,22 @@ export default function PassiveDetectionScreen() {
           title: "Couldn't link device",
           message: "Failed to save the Bluetooth link. Please try again.",
         });
+        setLinkingVehicleId(null);
         return;
       }
+      await loadData(); // refresh so the new link shows on the row
     }
-    await startDetectionFor();
+    setLinkingVehicleId(null);
   };
 
-  const handleSkipBluetooth = async () => {
+  const handleSkipBluetooth = () => {
     setShowPicker(false);
-    await startDetectionFor();
+    setLinkingVehicleId(null);
   };
 
   const handleCancelPicker = () => {
     setShowPicker(false);
-    // user backed out — leave detection off
+    setLinkingVehicleId(null);
   };
 
   const handleDemoMode = async (on: boolean) => {
@@ -292,12 +296,12 @@ export default function PassiveDetectionScreen() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
-  const selectedVehicle =
-    vehicles.find((v) => v.id === selectedVehicleId) ?? null;
-  const selectedVehicleName =
-    selectedVehicle?.nickname ||
-    (selectedVehicle
-      ? `${selectedVehicle.make} ${selectedVehicle.model}`
+  const linkingVehicle =
+    vehicles.find((v) => v.id === linkingVehicleId) ?? null;
+  const linkingVehicleName =
+    linkingVehicle?.nickname ||
+    (linkingVehicle
+      ? `${linkingVehicle.make} ${linkingVehicle.model}`
       : "vehicle");
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -374,7 +378,7 @@ export default function PassiveDetectionScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>VEHICLE TO TRACK</Text>
+        <Text style={styles.sectionTitle}>YOUR VEHICLES</Text>
         {vehicles.length === 0 ? (
           <Text style={styles.emptyText}>
             Add a vehicle first from the home screen.
@@ -385,11 +389,11 @@ export default function PassiveDetectionScreen() {
             return (
               <TouchableOpacity
                 key={v.id}
-                style={[
-                  styles.vehicleItem,
-                  selectedVehicleId === v.id && styles.vehicleItemActive,
-                ]}
-                onPress={() => setSelectedVehicleId(v.id)}
+                style={styles.vehicleItem}
+                onPress={() => {
+                  setLinkingVehicleId(v.id);
+                  setShowPicker(true);
+                }}
                 activeOpacity={0.85}
               >
                 <Text style={styles.vehicleEmoji}>
@@ -400,7 +404,9 @@ export default function PassiveDetectionScreen() {
                     {v.nickname || `${v.make} ${v.model}`}
                   </Text>
                   <Text style={styles.vehicleSub}>
-                    {v.year} · {v.currentOdometer.toLocaleString()} km
+                    {v.bluetoothName
+                      ? `🔗 ${v.bluetoothName}`
+                      : "Not linked — tap to link Bluetooth"}
                   </Text>
                 </View>
                 {tracking && (
@@ -408,12 +414,7 @@ export default function PassiveDetectionScreen() {
                     <Text style={styles.trackingText}>● TRACKING</Text>
                   </View>
                 )}
-                <View
-                  style={[
-                    styles.radio,
-                    selectedVehicleId === v.id && styles.radioActive,
-                  ]}
-                />
+                <Text style={styles.linkChevron}>›</Text>
               </TouchableOpacity>
             );
           })
@@ -421,23 +422,22 @@ export default function PassiveDetectionScreen() {
 
         <View style={styles.toggleCard}>
           <View style={{ flex: 1, marginRight: theme.spacing.md }}>
-            <Text style={styles.toggleTitle}>Background Detection</Text>
+            <Text style={styles.toggleTitle}>Automatic Detection</Text>
             <Text style={styles.toggleSubtitle}>
-              {isSelectedActive
-                ? "Active for this vehicle — close app and drive"
-                : "Toggle on to track the selected vehicle"}
+              {autoEnabled
+                ? "On — trips start automatically when you connect to a linked vehicle."
+                : "Turn on to detect trips automatically via Bluetooth."}
             </Text>
           </View>
-
           <Switch
-            value={isSelectedActive}
-            onValueChange={handleToggle}
-            disabled={busy || vehicles.length === 0 || !selectedVehicleId}
+            value={autoEnabled}
+            onValueChange={handleAutoToggle}
+            disabled={busy}
             trackColor={{
               false: theme.colors.border,
               true: theme.colors.accent,
             }}
-            thumbColor={isSelectedActive ? "#fff" : theme.colors.textMuted}
+            thumbColor={autoEnabled ? "#fff" : theme.colors.textMuted}
           />
         </View>
 
@@ -558,7 +558,7 @@ export default function PassiveDetectionScreen() {
       </ScrollView>
       <BluetoothPickerModal
         visible={showPicker}
-        vehicleName={selectedVehicleName}
+        vehicleName={linkingVehicleName}
         onSelect={handlePickDevice}
         onSkip={handleSkipBluetooth}
         onCancel={handleCancelPicker}
@@ -584,6 +584,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  linkChevron: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.xl,
+    marginLeft: theme.spacing.sm,
   },
   backText: {
     color: theme.colors.textSecondary,

@@ -37,6 +37,8 @@ const KEYS = {
   STATE_LOG: "@st_state_log",
 };
 
+const AUTO_DETECT_KEY = "@st_auto_detection";
+
 // Shared modular handles
 const db = getFirestore(getApp());
 const authInstance = getAuth(getApp());
@@ -438,7 +440,6 @@ export const contributeToCommunity = async (
   }
 };
 
-// READ SIDE — ready for the suggestion UI you'll add later.
 export interface CommunityInterval {
   serviceType: string;
   meanKm: number;
@@ -467,4 +468,17 @@ export const getCommunityIntervals = async (
     console.warn("[community] read failed:", err);
     return [];
   }
+};
+
+// ----- Global automatic-detection master switch -----
+
+export const getAutoDetectionEnabled = async (): Promise<boolean> => {
+  const raw = await AsyncStorage.getItem(AUTO_DETECT_KEY);
+  return raw === "true";
+};
+
+export const setAutoDetectionEnabled = async (
+  enabled: boolean,
+): Promise<void> => {
+  await AsyncStorage.setItem(AUTO_DETECT_KEY, enabled ? "true" : "false");
 };

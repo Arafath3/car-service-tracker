@@ -3,48 +3,27 @@ import React, {
   useContext,
   useEffect,
   useRef,
-  useState,
   ReactNode,
 } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 import BluetoothDetection from "@/../modules/bluetooth-detection/src/BluetoothDetectionModule";
-import { getVehicles, updateVehicle } from "@/lib/storage";
+import {
+  getVehicles,
+  getDetectionContext,
+  getAutoDetectionEnabled,
+} from "@/lib/storage";
+import {
+  startPassiveDetection,
+  finalizeCurrentTripAndStop,
+} from "@/lib/passiveDetectionService";
 
-type LinkCallback = (name: string, address: string) => void;
-
-interface BluetoothContextValue {
-  isLinking: boolean;
-  startLinking: (vehicleId: string, onLinked: LinkCallback) => void;
-  cancelLinking: () => void;
-}
-
-const BluetoothContext = createContext<BluetoothContextValue>({
-  isLinking: false,
-  startLinking: () => {},
-  cancelLinking: () => {},
-});
-
+const BluetoothContext = createContext<{}>({});
 export const useBluetooth = () => useContext(BluetoothContext);
 
 export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const startedRef = useRef(false);
-  const linkingRef = useRef<{
-    vehicleId: string;
-    onLinked: LinkCallback;
-  } | null>(null);
-  const [isLinking, setIsLinking] = useState(false);
-
-  const startLinking = (vehicleId: string, onLinked: LinkCallback) => {
-    linkingRef.current = { vehicleId, onLinked };
-    setIsLinking(true);
-  };
-
-  const cancelLinking = () => {
-    linkingRef.current = null;
-    setIsLinking(false);
-  };
 
   useEffect(() => {
     let connectedSub: any;
@@ -72,43 +51,25 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
         async (device) => {
           const address = device?.address;
           if (!address) return;
-
-          // LINKING MODE: capture this device for the target vehicle
-          if (linkingRef.current) {
-            const { vehicleId, onLinked } = linkingRef.current;
-            const name = device?.name ?? "Unknown device";
-            const vehicles = await getVehicles();
-            const v = vehicles.find((x) => x.id === vehicleId);
-            if (v) {
-              await updateVehicle({
-                ...v,
-                bluetoothAddress: address,
-                bluetoothName: name,
-              });
-              onLinked(name, address);
-              console.log("[BT] LINKED", name, address, "to", v.make, v.model);
-            }
-            linkingRef.current = null;
-            setIsLinking(false);
-            return;
-          }
-
-          // NORMAL MATCHING
+          if (!(await getAutoDetectionEnabled())) return; // master switch off
           const vehicles = await getVehicles();
           const match = vehicles.find((v) => v.bluetoothAddress === address);
-          if (match) {
+          if (!match) {
             console.log(
-              "[BT] MATCHED:",
-              match.make,
-              match.model,
-              "→ would start trip (todo)",
-            );
-          } else {
-            console.log(
-              "[BT] not linked, ignoring:",
+              "[BT] connected, not linked, ignoring:",
               device?.name ?? "Unknown",
               address,
             );
+            return;
+          }
+          console.log(
+            "[BT] MATCHED → auto-starting detection for",
+            match.make,
+            match.model,
+          );
+          const result = await startPassiveDetection(match.id);
+          if (!result.success) {
+            console.warn("[BT] auto-start failed:", result.error);
           }
         },
       );
@@ -118,15 +79,19 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
         async (device) => {
           const address = device?.address;
           if (!address) return;
+          if (!(await getAutoDetectionEnabled())) return;
           const vehicles = await getVehicles();
           const match = vehicles.find((v) => v.bluetoothAddress === address);
-          if (match) {
+          if (!match) return;
+          // only finalize if the disconnected vehicle is the one being tracked
+          const ctx = await getDetectionContext();
+          if (ctx?.selectedVehicleId === match.id) {
             console.log(
-              "[BT] MATCHED disconnect:",
+              "[BT] MATCHED disconnect → finalizing trip for",
               match.make,
               match.model,
-              "→ would finalize trip (todo)",
             );
+            await finalizeCurrentTripAndStop();
           }
         },
       );
@@ -143,10 +108,6 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
   }, []);
 
   return (
-    <BluetoothContext.Provider
-      value={{ isLinking, startLinking, cancelLinking }}
-    >
-      {children}
-    </BluetoothContext.Provider>
+    <BluetoothContext.Provider value={{}}>{children}</BluetoothContext.Provider>
   );
 };

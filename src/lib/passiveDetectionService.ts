@@ -4,17 +4,17 @@
 // Bridges Android background TaskManager to the detection state machine.
 // ============================================================================
 
-import * as TaskManager from 'expo-task-manager';
-import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
+import * as TaskManager from "expo-task-manager";
+import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 import type {
   DetectionContext,
   LocationSnapshot,
   PendingTrip,
   DetectionConfig,
-} from '@/types';
+} from "@/types";
 import {
   getDetectionContext,
   saveDetectionContext,
@@ -22,23 +22,23 @@ import {
   appendStateLog,
   getDetectionConfig,
   DEFAULT_DETECTION_CONFIG,
-} from './storage';
+} from "./storage";
 import {
   haversineKm,
   calculateSpeedKmh,
   isSnapshotValid,
   processSnapshot,
   FIXED_THRESHOLDS,
-} from './detectionEngine';
+} from "./detectionEngine";
 
-export const LOCATION_TASK_NAME = 'PASSIVE_DETECTION_LOCATION_V1';
+export const LOCATION_TASK_NAME = "PASSIVE_DETECTION_LOCATION_V1";
 
 // ============================================================================
 // THE BACKGROUND TASK - registered at module load
 // ============================================================================
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
-    console.error('[BG Task]', error);
+    console.error("[BG Task]", error);
     return;
   }
   if (!data) return;
@@ -55,11 +55,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 // LOCATION HANDLER
 // ============================================================================
 export const handleNewLocation = async (
-  loc: Location.LocationObject
+  loc: Location.LocationObject,
 ): Promise<void> => {
   try {
     const ctx = await getDetectionContext();
-    if (!ctx || !ctx.enabled || ctx.state === 'idle') return;
+    if (!ctx || !ctx.enabled || ctx.state === "idle") return;
 
     const config = await getDetectionConfig();
     const now = Date.now();
@@ -91,14 +91,15 @@ export const handleNewLocation = async (
 
     const result = processSnapshot(ctx, snapshot, now, config);
     const updatedSnapshots = [...ctx.recentSnapshots, snapshot].slice(
-      -config.rollingWindowSize
+      -config.rollingWindowSize,
     );
 
     let newCtx: DetectionContext = {
       ...ctx,
       state: result.newState,
       recentSnapshots: updatedSnapshots,
-      lastStateChangeAt: result.newState !== ctx.state ? now : ctx.lastStateChangeAt,
+      lastStateChangeAt:
+        result.newState !== ctx.state ? now : ctx.lastStateChangeAt,
       totalSnapshotsTaken: ctx.totalSnapshotsTaken + 1,
     };
 
@@ -118,7 +119,7 @@ export const handleNewLocation = async (
       await finalizeTripAndNotify(newCtx, ctx, config);
     }
   } catch (e) {
-    console.error('[BG] handleNewLocation failed:', e);
+    console.error("[BG] handleNewLocation failed:", e);
   }
 };
 
@@ -129,11 +130,11 @@ const applyStateTransitionEffects = (
   newCtx: DetectionContext,
   oldCtx: DetectionContext,
   snapshot: LocationSnapshot,
-  now: number
+  now: number,
 ): DetectionContext => {
   const result = { ...newCtx };
 
-  if (newCtx.state === 'driving' && oldCtx.state !== 'driving') {
+  if (newCtx.state === "driving" && oldCtx.state !== "driving") {
     if (!result.currentTripStartTime) {
       const startSnap = result.recentSnapshots[0] || snapshot;
       result.currentTripStartTime = startSnap.timestamp;
@@ -145,8 +146,10 @@ const applyStateTransitionEffects = (
 
   // Continuing or returning to driving: accumulate
   if (
-    newCtx.state === 'driving' &&
-    (oldCtx.state === 'driving' || oldCtx.state === 'stopped' || oldCtx.state === 'validating')
+    newCtx.state === "driving" &&
+    (oldCtx.state === "driving" ||
+      oldCtx.state === "stopped" ||
+      oldCtx.state === "validating")
   ) {
     const prev = oldCtx.recentSnapshots[oldCtx.recentSnapshots.length - 1];
     if (prev) {
@@ -154,7 +157,7 @@ const applyStateTransitionEffects = (
         prev.latitude,
         prev.longitude,
         snapshot.latitude,
-        snapshot.longitude
+        snapshot.longitude,
       );
       if (distKm * 1000 > FIXED_THRESHOLDS.MIN_DISTANCE_BETWEEN_SNAPSHOTS_M) {
         result.accumulatedDistanceKm += distKm;
@@ -162,12 +165,12 @@ const applyStateTransitionEffects = (
     }
   }
 
-  if (newCtx.state === 'stopped' && oldCtx.state !== 'stopped') {
+  if (newCtx.state === "stopped" && oldCtx.state !== "stopped") {
     result.stoppedSinceTimestamp = now;
   }
 
   if (
-    (newCtx.state === 'stopped' || newCtx.state === 'validating') &&
+    (newCtx.state === "stopped" || newCtx.state === "validating") &&
     oldCtx.stoppedSinceTimestamp
   ) {
     result.stoppedSinceTimestamp = oldCtx.stoppedSinceTimestamp;
@@ -182,14 +185,14 @@ const applyStateTransitionEffects = (
 const finalizeTripAndNotify = async (
   newCtx: DetectionContext,
   oldCtx: DetectionContext,
-  config: DetectionConfig
+  config: DetectionConfig,
 ): Promise<void> => {
   if (!oldCtx.currentTripStartTime || !oldCtx.selectedVehicleId) return;
 
   // Reset state regardless of outcome
   const resetCtx: DetectionContext = {
     ...newCtx,
-    state: 'monitoring',
+    state: "monitoring",
     currentTripStartTime: null,
     currentTripStartIndex: null,
     accumulatedDistanceKm: 0,
@@ -208,9 +211,15 @@ const finalizeTripAndNotify = async (
 
   const speeds: number[] = [];
   for (let i = 1; i < oldCtx.recentSnapshots.length; i++) {
-    speeds.push(calculateSpeedKmh(oldCtx.recentSnapshots[i - 1], oldCtx.recentSnapshots[i]));
+    speeds.push(
+      calculateSpeedKmh(
+        oldCtx.recentSnapshots[i - 1],
+        oldCtx.recentSnapshots[i],
+      ),
+    );
   }
-  const avgSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+  const avgSpeed =
+    speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
   const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : 0;
 
   const pendingTrip: PendingTrip = {
@@ -222,12 +231,12 @@ const finalizeTripAndNotify = async (
     snapshots: [...oldCtx.recentSnapshots],
     averageSpeedKmh: parseFloat(avgSpeed.toFixed(1)),
     maxSpeedKmh: parseFloat(maxSpeed.toFixed(1)),
-    status: 'awaiting_confirmation',
+    status: "awaiting_confirmation",
     createdAt: new Date().toISOString(),
   };
 
   await addPendingTrip(pendingTrip);
-  await saveDetectionContext({ ...resetCtx, state: 'awaiting_confirmation' });
+  await saveDetectionContext({ ...resetCtx, state: "awaiting_confirmation" });
   await sendTripConfirmationNotification(pendingTrip);
 };
 
@@ -235,20 +244,20 @@ const finalizeTripAndNotify = async (
 // NOTIFICATION
 // ============================================================================
 export const sendTripConfirmationNotification = async (
-  trip: PendingTrip
+  trip: PendingTrip,
 ): Promise<void> => {
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '🚗 Trip detected',
+        title: "🚗 Trip detected",
         body: `Looks like you drove ${trip.distanceKm.toFixed(2)} km. Tap to review.`,
-        data: { pendingTripId: trip.id, type: 'trip_confirmation' },
+        data: { pendingTripId: trip.id, type: "trip_confirmation" },
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
       trigger: null,
     });
   } catch (e) {
-    console.error('[BG] Notification failed:', e);
+    console.error("[BG] Notification failed:", e);
   }
 };
 
@@ -257,15 +266,15 @@ export const sendTripConfirmationNotification = async (
 // ============================================================================
 
 export const startPassiveDetection = async (
-  vehicleId: string
+  vehicleId: string,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     const fg = await Location.requestForegroundPermissionsAsync();
-    if (fg.status !== 'granted') {
-      return { success: false, error: 'Foreground location permission denied' };
+    if (fg.status !== "granted") {
+      return { success: false, error: "Foreground location permission denied" };
     }
     const bg = await Location.requestBackgroundPermissionsAsync();
-    if (bg.status !== 'granted') {
+    if (bg.status !== "granted") {
       return {
         success: false,
         error:
@@ -279,7 +288,7 @@ export const startPassiveDetection = async (
     await getDetectionConfig();
 
     const ctx: DetectionContext = {
-      state: 'monitoring',
+      state: "monitoring",
       enabled: true,
       selectedVehicleId: vehicleId,
       recentSnapshots: [],
@@ -292,7 +301,8 @@ export const startPassiveDetection = async (
     };
     await saveDetectionContext(ctx);
 
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    const isRegistered =
+      await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
     if (isRegistered) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
     }
@@ -303,30 +313,31 @@ export const startPassiveDetection = async (
       timeInterval: 10000, // or every 10 seconds
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: 'Service Tracker — Detection Active',
-        notificationBody: 'Watching for trips to log automatically.',
-        notificationColor: '#FF6B35',
+        notificationTitle: "Service Tracker — Detection Active",
+        notificationBody: "Watching for trips to log automatically.",
+        notificationColor: "#FF6B35",
       },
     });
 
     return { success: true };
   } catch (e: any) {
-    return { success: false, error: e?.message || 'Failed to start detection' };
+    return { success: false, error: e?.message || "Failed to start detection" };
   }
 };
 
 export const stopPassiveDetection = async (): Promise<void> => {
   try {
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    const isRegistered =
+      await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
     if (isRegistered) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
     }
     const ctx = await getDetectionContext();
     if (ctx) {
-      await saveDetectionContext({ ...ctx, enabled: false, state: 'idle' });
+      await saveDetectionContext({ ...ctx, enabled: false, state: "idle" });
     }
   } catch (e) {
-    console.error('[BG] Stop failed:', e);
+    console.error("[BG] Stop failed:", e);
   }
 };
 
@@ -337,5 +348,74 @@ export const isPassiveDetectionActive = async (): Promise<boolean> => {
     return await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
   } catch {
     return false;
+  }
+};
+
+// Called when a linked vehicle's Bluetooth disconnects — ends the drive,
+// saves whatever was accumulated as a pending trip, and stops GPS.
+export const finalizeCurrentTripAndStop = async (): Promise<void> => {
+  try {
+    const isRegistered =
+      await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    if (isRegistered) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    }
+
+    const ctx = await getDetectionContext();
+    if (!ctx) return;
+
+    const config = await getDetectionConfig();
+
+    // If a real trip was in progress, save it for confirmation
+    if (
+      ctx.currentTripStartTime &&
+      ctx.selectedVehicleId &&
+      ctx.accumulatedDistanceKm >= 0.1
+    ) {
+      const compensatedDistanceKm =
+        ctx.accumulatedDistanceKm * config.roadCompensationFactor;
+
+      const speeds: number[] = [];
+      for (let i = 1; i < ctx.recentSnapshots.length; i++) {
+        speeds.push(
+          calculateSpeedKmh(ctx.recentSnapshots[i - 1], ctx.recentSnapshots[i]),
+        );
+      }
+      const avgSpeed = speeds.length
+        ? speeds.reduce((a, b) => a + b, 0) / speeds.length
+        : 0;
+      const maxSpeed = speeds.length ? Math.max(...speeds) : 0;
+
+      const pendingTrip: PendingTrip = {
+        id: uuidv4(),
+        vehicleId: ctx.selectedVehicleId,
+        startTime: ctx.currentTripStartTime,
+        endTime: Date.now(),
+        distanceKm: parseFloat(compensatedDistanceKm.toFixed(2)),
+        snapshots: [...ctx.recentSnapshots],
+        averageSpeedKmh: parseFloat(avgSpeed.toFixed(1)),
+        maxSpeedKmh: parseFloat(maxSpeed.toFixed(1)),
+        status: "awaiting_confirmation",
+        createdAt: new Date().toISOString(),
+      };
+
+      await addPendingTrip(pendingTrip);
+      await sendTripConfirmationNotification(pendingTrip);
+    }
+
+    // Reset to idle
+    await saveDetectionContext({
+      ...ctx,
+      enabled: false,
+      state: "idle",
+      currentTripStartTime: null,
+      currentTripStartIndex: null,
+      accumulatedDistanceKm: 0,
+      stoppedSinceTimestamp: null,
+      recentSnapshots: [],
+      lastStateChangeAt: Date.now(),
+    });
+  } catch (e) {
+    console.error("[BG] finalizeCurrentTripAndStop failed:", e);
   }
 };
