@@ -44,6 +44,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (!data) return;
 
   const { locations } = data as { locations: Location.LocationObject[] };
+  console.log("[BG Task] received", locations?.length ?? 0, "locations");
   if (!locations || locations.length === 0) return;
 
   for (const loc of locations) {
@@ -304,7 +305,14 @@ export const startPassiveDetection = async (
     const isRegistered =
       await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
     if (isRegistered) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      const existing = await getDetectionContext();
+      await saveDetectionContext({
+        ...(existing ?? ctx),
+        enabled: true,
+        state: "monitoring",
+        selectedVehicleId: vehicleId,
+      });
+      return { success: true };
     }
 
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {

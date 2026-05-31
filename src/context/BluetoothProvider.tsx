@@ -68,6 +68,10 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
             match.model,
           );
           const result = await startPassiveDetection(match.id);
+          console.log(
+            "[BT] startPassiveDetection result:",
+            JSON.stringify(result),
+          );
           if (!result.success) {
             console.warn("[BT] auto-start failed:", result.error);
           }
