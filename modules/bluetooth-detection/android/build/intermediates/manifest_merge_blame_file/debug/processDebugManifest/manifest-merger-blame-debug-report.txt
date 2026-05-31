@@ -1,22 +1,41 @@
 1<?xml version="1.0" encoding="utf-8"?>
 2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
 3    package="expo.modules.bluetoothdetection" >
-4    <!--
-5  <application>
-6    <receiver
-7      android:name=".BluetoothConnectionReceiver"
-8      android:exported="true">
-9      <intent-filter>
-10        <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
-11        <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
-12      </intent-filter>
-13    </receiver>
-14  </application>
-15    -->
-16    <uses-sdk android:minSdkVersion="24" />
-17
-18    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-18-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:3:3-74
-18-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:3:20-71
-19
-20</manifest>
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <uses-feature android:name="android.software.companion_device_setup" />
+7-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:3:3-74
+7-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:3:17-71
+8
+9    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+9-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:4:3-74
+9-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:4:20-71
+10    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+10-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:5:3-92
+10-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:5:20-89
+11    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+11-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:6:3-116
+11-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:6:20-113
+12
+13    <application>
+13-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:8:3-17:17
+14        <receiver
+14-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:9:5-16:16
+15            android:name="expo.modules.bluetoothdetection.BluetoothConnectionReceiver"
+15-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:10:7-81
+16            android:exported="true" >
+16-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:11:7-30
+17            <intent-filter>
+17-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:12:7-15:23
+18                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+18-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:13:9-80
+18-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:13:17-77
+19                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+19-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:14:9-83
+19-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:14:17-80
+20            </intent-filter>
+21        </receiver>
+22    </application>
+23
+24</manifest>

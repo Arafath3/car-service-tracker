@@ -16,6 +16,8 @@ import type { Vehicle, DetectionState, PendingTrip } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { BluetoothPickerModal } from "@/components/BluetoothPickerModal";
 import type { PairedDevice } from "@/../modules/bluetooth-detection/src/BluetoothDetection.types";
+import BluetoothDetection from "@/../modules/bluetooth-detection/src/BluetoothDetectionModule";
+
 import {
   getVehicles,
   getDetectionContext,
@@ -296,6 +298,20 @@ export default function PassiveDetectionScreen() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
+  const testCdmAssociate = async () => {
+    try {
+      const result =
+        await BluetoothDetection.associateVehicle("34:09:C9:12:03:2D");
+      console.log("[CDM] associated:", result);
+      console.log(
+        "[CDM] all associations:",
+        await BluetoothDetection.getAssociations(),
+      );
+    } catch (e) {
+      console.log("[CDM] associate error:", e);
+    }
+  };
+
   const linkingVehicle =
     vehicles.find((v) => v.id === linkingVehicleId) ?? null;
   const linkingVehicleName =
@@ -440,7 +456,19 @@ export default function PassiveDetectionScreen() {
             thumbColor={autoEnabled ? "#fff" : theme.colors.textMuted}
           />
         </View>
-
+        <TouchableOpacity
+          onPress={testCdmAssociate}
+          style={{
+            padding: 16,
+            backgroundColor: "#444",
+            borderRadius: 8,
+            marginVertical: 12,
+          }}
+        >
+          <Text style={{ color: "#fff", textAlign: "center" }}>
+            TEST CDM ASSOCIATE
+          </Text>
+        </TouchableOpacity>
         {/* Demo mode toggle */}
         <TouchableOpacity
           style={styles.demoToggleRow}

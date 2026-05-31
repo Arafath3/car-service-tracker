@@ -8,6 +8,14 @@ import android.content.Intent
 import android.content.IntentFilter
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import android.companion.AssociationInfo
+import android.companion.AssociationRequest
+import android.companion.BluetoothDeviceFilter
+import android.companion.CompanionDeviceManager
+import android.content.IntentSender
+import android.os.Build
+import expo.modules.kotlin.Promise
+import java.util.concurrent.Executor
 
 class BluetoothDetectionModule : Module() {
 
@@ -29,6 +37,52 @@ class BluetoothDetectionModule : Module() {
     // Returns the phone's already-paired Bluetooth devices (name + address)
     AsyncFunction("getPairedDevices") {
       getPairedDevices()
+    }
+
+    // Associate a vehicle's Bluetooth device with the app via CDM (shows a system dialog)
+    AsyncFunction("associateVehicle") { address: String, promise: Promise ->
+      if (Build.VERSION.SDK_INT < 33) {
+        promise.reject("UNSUPPORTED", "CDM association needs Android 13+", null)
+        return@AsyncFunction
+      }
+      val activity = appContext.currentActivity
+      if (activity == null) {
+        promise.reject("NO_ACTIVITY", "No current activity to show the dialog", null)
+        return@AsyncFunction
+      }
+
+      val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+      val filter = BluetoothDeviceFilter.Builder().setAddress(address).build()
+      val request = AssociationRequest.Builder()
+        .addDeviceFilter(filter)
+        .setSingleDevice(true)
+        .build()
+      val executor = Executor { it.run() }
+
+      cdm.associate(request, executor, object : CompanionDeviceManager.Callback() {
+        override fun onAssociationPending(intentSender: IntentSender) {
+          try {
+            activity.startIntentSenderForResult(intentSender, 0x4242, null, 0, 0, 0)
+          } catch (e: Exception) {
+            promise.reject("LAUNCH_FAILED", e.message ?: "Could not launch dialog", e)
+          }
+        }
+
+        override fun onAssociationCreated(associationInfo: AssociationInfo) {
+          promise.resolve(address)
+        }
+
+        override fun onFailure(error: CharSequence?) {
+          promise.reject("ASSOC_FAILED", error?.toString() ?: "Association failed", null)
+        }
+      })
+    }
+
+    // List the MAC addresses currently associated (to verify it stuck)
+    AsyncFunction("getAssociations") {
+      if (Build.VERSION.SDK_INT < 33) return@AsyncFunction emptyList<String>()
+      val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+      cdm.myAssociations.mapNotNull { it.deviceMacAddress?.toString() }
     }
 
     OnDestroy {
