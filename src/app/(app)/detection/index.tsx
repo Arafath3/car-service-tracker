@@ -1,7 +1,4 @@
 import React, { useState, useCallback } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
-import BluetoothDetection from "@/../modules/bluetooth-detection/src/BluetoothDetectionModule";
-
 import {
   View,
   Text,
@@ -15,10 +12,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import type { Vehicle, DetectionState, PendingTrip } from "@/types";
 import { useAuth } from "@/context/AuthContext";
-import { useEffect } from "react";
+import { BluetoothPickerModal } from "@/components/BluetoothPickerModal";
+import type { PairedDevice } from "@/../modules/bluetooth-detection/src/BluetoothDetection.types";
 import {
   getVehicles,
   getDetectionContext,
+  updateVehicle,
   getStateLog,
   StateLogEntry,
   clearStateLog,
@@ -85,6 +84,7 @@ export default function PassiveDetectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
@@ -118,7 +118,8 @@ export default function PassiveDetectionScreen() {
         setState(ctx.state);
         setSnapshotCount(ctx.totalSnapshotsTaken);
         setAccumulatedKm(ctx.accumulatedDistanceKm);
-        if (ctx.selectedVehicleId) setSelectedVehicleId(ctx.selectedVehicleId);
+        if (active && ctx.selectedVehicleId)
+          setSelectedVehicleId(ctx.selectedVehicleId);
       } else {
         setState("idle");
       }
@@ -132,12 +133,28 @@ export default function PassiveDetectionScreen() {
 
     if (!pError && p) setPending(p);
   }, [user?.id]);
+
+  const refreshTelemetry = useCallback(async () => {
+    const [[ctxError, ctx], [logError, log], [pError, p]] = await Promise.all([
+      safeAwait(getDetectionContext()),
+      safeAwait(getStateLog()),
+      safeAwait(getAwaitingConfirmation()),
+    ]);
+    if (!ctxError && ctx) {
+      setState(ctx.state);
+      setSnapshotCount(ctx.totalSnapshotsTaken);
+      setAccumulatedKm(ctx.accumulatedDistanceKm);
+    }
+    if (!logError && log) setStateLog(log.reverse());
+    if (!pError && p) setPending(p);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      loadData();
-      const interval = setInterval(loadData, 3000);
+      loadData(); // full sync once, on focus
+      const interval = setInterval(refreshTelemetry, 3000); // only telemetry every 3s
       return () => clearInterval(interval);
-    }, [loadData]),
+    }, [loadData, refreshTelemetry]),
   );
 
   const onRefresh = async () => {
@@ -146,40 +163,86 @@ export default function PassiveDetectionScreen() {
     setRefreshing(false);
   };
 
+  // Does the actual start; called when already linked, or after pick/skip.
+  const startDetectionFor = async () => {
+    if (!selectedVehicleId) return;
+    setBusy(true);
+    const result = await startPassiveDetection(selectedVehicleId);
+    if (!result.success) {
+      setAlertConfig({
+        title: "Could not start detection",
+        message: result.error || "Unknown error",
+      });
+      setBusy(false);
+      return;
+    }
+    setEnabled(true);
+    setAlertConfig({
+      title: "Detection Active",
+      message:
+        "The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.",
+    });
+    await refreshTelemetry();
+    setBusy(false);
+  };
+
   const handleToggle = async (next: boolean) => {
     if (busy) return;
-    setBusy(true);
+
     if (next) {
       if (!selectedVehicleId) {
         setAlertConfig({
           title: "Select a vehicle",
           message: "Please select which vehicle to track first.",
         });
-
-        setBusy(false);
         return;
       }
-      const result = await startPassiveDetection(selectedVehicleId);
-      if (!result.success) {
-        setAlertConfig({
-          title: "Could not start detection",
-          message: `${result.error} || "Unknown error"`,
-        });
-        setBusy(false);
-        return;
+      const vehicle = vehicles.find((v) => v.id === selectedVehicleId);
+      if (vehicle?.bluetoothAddress) {
+        // already linked → start straight away
+        await startDetectionFor();
+      } else {
+        // not linked yet → ask which Bluetooth first
+        setShowPicker(true);
       }
-      setEnabled(true);
-      setAlertConfig({
-        title: "Detection Active",
-        message:
-          "The app will monitor for trips in the background. You can close the app and a notification will appear when a trip is detected.",
-      });
     } else {
+      setBusy(true);
       await stopPassiveDetection();
       setEnabled(false);
+      await refreshTelemetry();
+      setBusy(false);
     }
-    await loadData();
-    setBusy(false);
+  };
+
+  const handlePickDevice = async (device: PairedDevice) => {
+    setShowPicker(false);
+    if (selectedVehicle) {
+      const [err] = await safeAwait(
+        updateVehicle({
+          ...selectedVehicle,
+          bluetoothAddress: device.address,
+          bluetoothName: device.name,
+        }),
+      );
+      if (err) {
+        setAlertConfig({
+          title: "Couldn't link device",
+          message: "Failed to save the Bluetooth link. Please try again.",
+        });
+        return;
+      }
+    }
+    await startDetectionFor();
+  };
+
+  const handleSkipBluetooth = async () => {
+    setShowPicker(false);
+    await startDetectionFor();
+  };
+
+  const handleCancelPicker = () => {
+    setShowPicker(false);
+    // user backed out — leave detection off
   };
 
   const handleDemoMode = async (on: boolean) => {
@@ -220,58 +283,13 @@ export default function PassiveDetectionScreen() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
-  // bluetooth
-  useEffect(() => {
-    let connectedSub: any;
-    let disconnectedSub: any;
-
-    const start = async () => {
-      if (Platform.OS === "android" && Platform.Version >= 31) {
-        const result = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        );
-        console.log("[BT] permission result:", result);
-        if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-          console.log(
-            "[BT] permission NOT granted — broadcasts will be blocked",
-          );
-          return;
-        }
-      }
-
-      BluetoothDetection.startListening();
-      console.log("[BT] Listening for Bluetooth connections...");
-
-      connectedSub = BluetoothDetection.addListener(
-        "onBluetoothConnected",
-        (device) => {
-          console.log(
-            "[BT] CONNECTED:",
-            device?.name ?? "Unknown",
-            device?.address ?? "Unknown",
-          );
-        },
-      );
-      disconnectedSub = BluetoothDetection.addListener(
-        "onBluetoothDisconnected",
-        (device) => {
-          console.log(
-            "[BT] DISCONNECTED:",
-            device?.name ?? "Unknow",
-            device?.address ?? "Unknow",
-          );
-        },
-      );
-    };
-
-    start();
-
-    return () => {
-      BluetoothDetection.stopListening();
-      connectedSub?.remove();
-      disconnectedSub?.remove();
-    };
-  }, []);
+  const selectedVehicle =
+    vehicles.find((v) => v.id === selectedVehicleId) ?? null;
+  const selectedVehicleName =
+    selectedVehicle?.nickname ||
+    (selectedVehicle
+      ? `${selectedVehicle.make} ${selectedVehicle.model}`
+      : "vehicle");
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.headerBar}>
@@ -521,6 +539,13 @@ export default function PassiveDetectionScreen() {
           </View>
         )}
       </ScrollView>
+      <BluetoothPickerModal
+        visible={showPicker}
+        vehicleName={selectedVehicleName}
+        onSelect={handlePickDevice}
+        onSkip={handleSkipBluetooth}
+        onCancel={handleCancelPicker}
+      />
       <ThemedAlert
         visible={!!alertConfig}
         title={alertConfig?.title ?? ""}

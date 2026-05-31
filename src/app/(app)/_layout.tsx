@@ -1,7 +1,7 @@
 import { Stack, ErrorBoundaryProps } from "expo-router";
 import { View, Text, TouchableOpacity } from "react-native";
 import { theme } from "@/theme";
-
+import { BluetoothProvider } from "@/context/BluetoothProvider";
 // Fallback shown when a screen in this group crashes during render
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
@@ -45,40 +45,42 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 // The actual layout — this is what renders normally
 export default function AppLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.bg },
-      }}
-    >
-      <Stack.Screen name="index" />
-      <Stack.Screen name="vehicle/add" options={{ presentation: "modal" }} />
-      <Stack.Screen name="vehicle/[id]" />
-      <Stack.Screen
-        name="vehicle/edit-odometer"
-        options={{ presentation: "modal" }}
-      />
-      <Stack.Screen
-        name="vehicle/track-trip"
-        options={{ presentation: "modal" }}
-      />
-      <Stack.Screen
-        name="vehicle/add-service"
-        options={{ presentation: "modal" }}
-      />
-      <Stack.Screen name="detection/index" />
-      <Stack.Screen
-        name="detection/confirm"
-        options={{ presentation: "modal" }}
-      />
-      <Stack.Screen
-        name="vehicle/rough-estimate"
-        options={{ presentation: "modal" }}
-      />
-      <Stack.Screen
-        name="vehicle/manage-intervals"
-        options={{ presentation: "modal" }}
-      />
-    </Stack>
+    <BluetoothProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: theme.colors.bg },
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="vehicle/add" options={{ presentation: "modal" }} />
+        <Stack.Screen name="vehicle/[id]" />
+        <Stack.Screen
+          name="vehicle/edit-odometer"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen
+          name="vehicle/track-trip"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen
+          name="vehicle/add-service"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen name="detection/index" />
+        <Stack.Screen
+          name="detection/confirm"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen
+          name="vehicle/rough-estimate"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen
+          name="vehicle/manage-intervals"
+          options={{ presentation: "modal" }}
+        />
+      </Stack>
+    </BluetoothProvider>
   );
 }

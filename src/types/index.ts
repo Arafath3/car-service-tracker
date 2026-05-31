@@ -23,6 +23,8 @@ export interface Vehicle {
   customIntervals?: Record<string, number>;
   customServiceTypes?: ServiceInterval[];
   estimation?: VehicleEstimation;
+  bluetoothAddress?: string;
+  bluetoothName?: string;
 }
 
 export interface VehicleEstimation {
