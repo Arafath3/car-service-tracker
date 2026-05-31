@@ -1,0 +1,31 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="expo.modules.bluetoothdetection" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+7-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:3:3-74
+7-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:3:20-71
+8
+9    <application>
+9-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:5:3-14:17
+10        <receiver
+10-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:6:5-13:16
+11            android:name="expo.modules.bluetoothdetection.BluetoothConnectionReceiver"
+11-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:7:7-50
+12            android:exported="true" >
+12-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:8:7-30
+13            <intent-filter>
+13-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:9:7-12:23
+14                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+14-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:10:9-80
+14-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:10:17-77
+15                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+15-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:11:9-83
+15-->/home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:11:17-80
+16            </intent-filter>
+17        </receiver>
+18    </application>
+19
+20</manifest>
