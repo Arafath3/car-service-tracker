@@ -1,7 +1,7 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:1:1-31:12
-INJECTED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:1:1-31:12
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:1:1-38:12
+INJECTED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:1:1-38:12
 	package
 		INJECTED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml
 	xmlns:android
@@ -26,38 +26,54 @@ uses-permission#android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE
 ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:7:3-98
 	android:name
 		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:7:20-95
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:8:3-75
+	android:name
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:8:20-72
+uses-permission#android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:9:3-92
+	android:name
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:9:20-89
 application
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:9:3-29:17
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:11:3-36:17
 receiver#expo.modules.bluetoothdetection.BluetoothConnectionReceiver
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:11:5-18:16
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:13:5-20:16
 	android:exported
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:13:7-30
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:15:7-30
 	android:name
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:12:7-81
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:14:7-81
 intent-filter#action:name:android.bluetooth.device.action.ACL_CONNECTED+action:name:android.bluetooth.device.action.ACL_DISCONNECTED
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:14:7-17:23
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:16:7-19:23
 action#android.bluetooth.device.action.ACL_CONNECTED
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:15:9-80
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:17:9-80
 	android:name
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:15:17-77
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:17:17-77
 action#android.bluetooth.device.action.ACL_DISCONNECTED
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:16:9-83
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:18:9-83
 	android:name
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:16:17-80
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:18:17-80
 service#expo.modules.bluetoothdetection.CompanionDeviceTrackingService
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:20:5-27:15
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:22:5-29:15
 	android:exported
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:22:7-30
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:24:7-30
 	android:permission
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:23:7-76
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:25:7-76
 	android:name
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:21:7-84
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:23:7-84
 intent-filter#action:name:android.companion.CompanionDeviceService
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:24:7-26:23
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:26:7-28:23
 action#android.companion.CompanionDeviceService
-ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:25:9-75
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:27:9-75
 	android:name
-		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:25:17-72
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:27:17-72
+service#expo.modules.bluetoothdetection.TripHeadlessService
+ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:31:5-34:57
+	android:exported
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:33:7-31
+	android:foregroundServiceType
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:34:7-54
+	android:name
+		ADDED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml:32:7-73
 uses-sdk
 INJECTED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /home/arafath/Downloads/car-service-tracker/modules/bluetooth-detection/android/src/main/AndroidManifest.xml
