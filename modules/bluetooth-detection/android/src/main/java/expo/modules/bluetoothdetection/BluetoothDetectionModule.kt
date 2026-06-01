@@ -78,12 +78,30 @@ class BluetoothDetectionModule : Module() {
       })
     }
 
+    // Tell the system to wake our CompanionDeviceService when this device appears/disappears
+    AsyncFunction("observeVehicle") { address: String ->
+      if (Build.VERSION.SDK_INT < 33) return@AsyncFunction
+      val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+      cdm.startObservingDevicePresence(address)
+    }
+
+    // Remove an association (handy for testing / re-linking)
+    AsyncFunction("disassociateVehicle") { address: String ->
+      if (Build.VERSION.SDK_INT < 33) return@AsyncFunction
+      val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+      cdm.myAssociations
+        .filter { it.deviceMacAddress?.toString()?.equals(address, ignoreCase = true) == true }
+        .forEach { cdm.disassociate(it.id) }
+    }
+
     // List the MAC addresses currently associated (to verify it stuck)
     AsyncFunction("getAssociations") {
       if (Build.VERSION.SDK_INT < 33) return@AsyncFunction emptyList<String>()
       val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
       cdm.myAssociations.mapNotNull { it.deviceMacAddress?.toString() }
     }
+
+    
 
     OnDestroy {
       unregisterReceiver()

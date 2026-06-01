@@ -11,6 +11,8 @@ declare class BluetoothDetectionModule extends NativeModule<BluetoothDetectionMo
   getPairedDevices(): Promise<PairedDevice[]>;
   associateVehicle(address: string): Promise<string>;
   getAssociations(): Promise<string[]>;
+  disassociateVehicle(address: string): Promise<void>;
+  observeVehicle(address: string): Promise<void>;
 }
 
 export default requireNativeModule<BluetoothDetectionModule>(

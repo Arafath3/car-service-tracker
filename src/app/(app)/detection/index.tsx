@@ -297,12 +297,20 @@ export default function PassiveDetectionScreen() {
     const d = new Date(ts);
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
-
   const testCdmAssociate = async () => {
     try {
+      // 1. clear any existing associations first (await it)
+      await BluetoothDetection.disassociateVehicle("34:09:C9:12:03:2D");
+
+      // 2. associate — must complete before observing
       const result =
         await BluetoothDetection.associateVehicle("34:09:C9:12:03:2D");
       console.log("[CDM] associated:", result);
+
+      // 3. only now start observing (await it)
+      await BluetoothDetection.observeVehicle("34:09:C9:12:03:2D");
+      console.log("[CDM] now observing");
+
       console.log(
         "[CDM] all associations:",
         await BluetoothDetection.getAssociations(),
@@ -311,7 +319,6 @@ export default function PassiveDetectionScreen() {
       console.log("[CDM] associate error:", e);
     }
   };
-
   const linkingVehicle =
     vehicles.find((v) => v.id === linkingVehicleId) ?? null;
   const linkingVehicleName =
@@ -456,6 +463,7 @@ export default function PassiveDetectionScreen() {
             thumbColor={autoEnabled ? "#fff" : theme.colors.textMuted}
           />
         </View>
+        {/* need to be removed here for testing */}
         <TouchableOpacity
           onPress={testCdmAssociate}
           style={{
