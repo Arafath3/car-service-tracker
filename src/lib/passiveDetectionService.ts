@@ -432,6 +432,8 @@ const COLD_MOVEMENT_FLOOR_KMH = 3; // ignore parked/stationary GPS jitter
 
 export const reconcileColdTrip = async (): Promise<void> => {
   try {
+    const complete = await BluetoothDetection.isColdTripComplete();
+    if (!complete) return;
     const raw = await BluetoothDetection.getBufferedPoints();
     let points: BufferedPoint[] = [];
     try {

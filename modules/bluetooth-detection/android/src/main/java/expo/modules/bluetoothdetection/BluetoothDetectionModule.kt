@@ -16,6 +16,7 @@ import android.content.IntentSender
 import android.os.Build
 import expo.modules.kotlin.Promise
 import java.util.concurrent.Executor
+import java.io.File
 
 class BluetoothDetectionModule : Module() {
 
@@ -96,16 +97,20 @@ class BluetoothDetectionModule : Module() {
       cdm.myAssociations.mapNotNull { it.deviceMacAddress?.toString() }
     }
 
-    AsyncFunction("getBufferedPoints") {
-      val file = java.io.File(context.filesDir, "cold_trip_points.json")
-      if (!file.exists()) return@AsyncFunction "[]"
-      file.readText()
-    }
+   AsyncFunction("getBufferedPoints") {
+  val file = java.io.File(context.filesDir, "cold_trip_points.json")
+  if (!file.exists()) return@AsyncFunction "[]"
+  file.readText()
+}
 
-    AsyncFunction("clearBufferedPoints") {
-      val file = java.io.File(context.filesDir, "cold_trip_points.json")
-      if (file.exists()) file.delete()
-    }
+AsyncFunction("isColdTripComplete") {
+  java.io.File(context.filesDir, "cold_trip_ended.flag").exists()
+}
+
+AsyncFunction("clearBufferedPoints") {
+  java.io.File(context.filesDir, "cold_trip_points.json").let { if (it.exists()) it.delete() }
+  java.io.File(context.filesDir, "cold_trip_ended.flag").let { if (it.exists()) it.delete() }
+}
 
     AsyncFunction("getBufferedVehicleAddress") {
       val file = java.io.File(context.filesDir, "cold_trip_vehicle.txt")
