@@ -11,18 +11,16 @@ import android.content.Intent
 @RequiresApi(Build.VERSION_CODES.TIRAMISU) // API 33+
 class CompanionDeviceTrackingService : CompanionDeviceService() {
 
-  @SuppressLint("MissingPermission")
 override fun onDeviceAppeared(associationInfo: AssociationInfo) {
   val address = associationInfo.deviceMacAddress?.toString() ?: "unknown"
   Log.d("BT_CDM", "onDeviceAppeared: $address")
-  startTask(address, "appeared")
+  startForegroundService(Intent(this, NativeLocationService::class.java))
 }
 
-@SuppressLint("MissingPermission")
 override fun onDeviceDisappeared(associationInfo: AssociationInfo) {
   val address = associationInfo.deviceMacAddress?.toString() ?: "unknown"
   Log.d("BT_CDM", "onDeviceDisappeared: $address")
-  startTask(address, "disappeared")
+  stopService(Intent(this, NativeLocationService::class.java))
 }
 
 private fun startTask(address: String, event: String) {

@@ -209,6 +209,7 @@ export default function PassiveDetectionScreen() {
       }
       await Notifications.requestPermissionsAsync();
       await setAutoDetectionEnabled(true);
+      BluetoothDetection.startKeepAlive();
       setAutoEnabled(true);
       setAlertConfig({
         title: "Automatic detection on",
@@ -219,6 +220,7 @@ export default function PassiveDetectionScreen() {
       await setAutoDetectionEnabled(false);
       setAutoEnabled(false);
       await stopPassiveDetection();
+      BluetoothDetection.stopKeepAlive();
       setActiveVehicleId(null);
     }
 

@@ -13,6 +13,8 @@ declare class BluetoothDetectionModule extends NativeModule<BluetoothDetectionMo
   getAssociations(): Promise<string[]>;
   disassociateVehicle(address: string): Promise<void>;
   observeVehicle(address: string): Promise<void>;
+  startKeepAlive(): void;
+  stopKeepAlive(): void;
 }
 
 export default requireNativeModule<BluetoothDetectionModule>(

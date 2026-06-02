@@ -101,6 +101,18 @@ class BluetoothDetectionModule : Module() {
       cdm.myAssociations.mapNotNull { it.deviceMacAddress?.toString() }
     }
 
+    Function("startKeepAlive") {
+      val intent = Intent(context, MonitoringService::class.java)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+      } else {
+        context.startService(intent)
+      }
+    }
+
+    Function("stopKeepAlive") {
+      context.stopService(Intent(context, MonitoringService::class.java))
+    }
     
 
     OnDestroy {
