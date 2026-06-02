@@ -14,7 +14,9 @@ class CompanionDeviceTrackingService : CompanionDeviceService() {
 override fun onDeviceAppeared(associationInfo: AssociationInfo) {
   val address = associationInfo.deviceMacAddress?.toString() ?: "unknown"
   Log.d("BT_CDM", "onDeviceAppeared: $address")
-  startForegroundService(Intent(this, NativeLocationService::class.java))
+  val intent = Intent(this, NativeLocationService::class.java)
+  intent.putExtra("address", address)
+  startForegroundService(intent)
 }
 
 override fun onDeviceDisappeared(associationInfo: AssociationInfo) {

@@ -21,6 +21,9 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
 
 class NativeLocationService : Service() {
 
@@ -78,6 +81,7 @@ class NativeLocationService : Service() {
       override fun onLocationResult(result: LocationResult) {
         for (loc: Location in result.locations) {
           Log.d("BT_LOC", "lat=${loc.latitude} lng=${loc.longitude} spd=${loc.speed} mock=${loc.isMock}")
+          bufferPoint(loc)
         }
       }
     }
@@ -90,8 +94,20 @@ class NativeLocationService : Service() {
     }
   }
 
-  override fun onDestroy() {
-    callback?.let { fusedClient?.removeLocationUpdates(it) }
-    super.onDestroy()
+  private fun bufferPoint(loc: Location) {
+    try {
+      val file = File(filesDir, "cold_trip_points.json")
+      val arr = if (file.exists()) JSONArray(file.readText()) else JSONArray()
+      val point = JSONObject().apply {
+        put("latitude", loc.latitude)
+        put("longitude", loc.longitude)
+        put("timestamp", loc.time)
+        put("speed", loc.speed.toDouble())
+      }
+      arr.put(point)
+      file.writeText(arr.toString())
+    } catch (e: Exception) {
+      Log.d("BT_LOC", "bufferPoint FAILED: ${e.message}")
+    }
   }
 }

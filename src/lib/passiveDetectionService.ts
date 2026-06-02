@@ -1,9 +1,7 @@
 // ============================================================================
 // PASSIVE DETECTION BACKGROUND SERVICE
 // ============================================================================
-// Bridges Android background TaskManager to the detection state machine.
-// ============================================================================
-
+import BluetoothDetection from "@/../modules/bluetooth-detection/src/BluetoothDetectionModule";
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
@@ -21,6 +19,7 @@ import {
   addPendingTrip,
   appendStateLog,
   getDetectionConfig,
+  getVehicles,
   DEFAULT_DETECTION_CONFIG,
 } from "./storage";
 import {
@@ -32,6 +31,13 @@ import {
 } from "./detectionEngine";
 
 export const LOCATION_TASK_NAME = "PASSIVE_DETECTION_LOCATION_V1";
+
+type BufferedPoint = {
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+  speed: number;
+};
 
 // ============================================================================
 // THE BACKGROUND TASK - registered at module load
@@ -144,7 +150,6 @@ const applyStateTransitionEffects = (
     result.stoppedSinceTimestamp = null;
   }
 
-  // Continuing or returning to driving: accumulate
   if (
     newCtx.state === "driving" &&
     (oldCtx.state === "driving" ||
@@ -189,7 +194,6 @@ const finalizeTripAndNotify = async (
 ): Promise<void> => {
   if (!oldCtx.currentTripStartTime || !oldCtx.selectedVehicleId) return;
 
-  // Reset state regardless of outcome
   const resetCtx: DetectionContext = {
     ...newCtx,
     state: "monitoring",
@@ -200,7 +204,6 @@ const finalizeTripAndNotify = async (
     lastStateChangeAt: Date.now(),
   };
 
-  // Trip too short to be worth confirming
   if (oldCtx.accumulatedDistanceKm < 0.1) {
     await saveDetectionContext(resetCtx);
     return;
@@ -264,7 +267,6 @@ export const sendTripConfirmationNotification = async (
 // ============================================================================
 // PUBLIC CONTROL API
 // ============================================================================
-
 export const startPassiveDetection = async (
   vehicleId: string,
 ): Promise<{ success: boolean; error?: string }> => {
@@ -283,8 +285,6 @@ export const startPassiveDetection = async (
     }
 
     await Notifications.requestPermissionsAsync();
-
-    // Make sure config exists
     await getDetectionConfig();
 
     const ctx: DetectionContext = {
@@ -316,8 +316,8 @@ export const startPassiveDetection = async (
 
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       accuracy: Location.Accuracy.High,
-      distanceInterval: 10, // every 10m moved
-      timeInterval: 10000, // or every 10 seconds
+      distanceInterval: 10,
+      timeInterval: 10000,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: "Service Tracker — Detection Active",
@@ -358,8 +358,6 @@ export const isPassiveDetectionActive = async (): Promise<boolean> => {
   }
 };
 
-// Called when a linked vehicle's Bluetooth disconnects — ends the drive,
-// saves whatever was accumulated as a pending trip, and stops GPS.
 export const finalizeCurrentTripAndStop = async (): Promise<void> => {
   try {
     const isRegistered =
@@ -373,7 +371,6 @@ export const finalizeCurrentTripAndStop = async (): Promise<void> => {
 
     const config = await getDetectionConfig();
 
-    // If a real trip was in progress, save it for confirmation
     if (
       ctx.currentTripStartTime &&
       ctx.selectedVehicleId &&
@@ -410,7 +407,6 @@ export const finalizeCurrentTripAndStop = async (): Promise<void> => {
       await sendTripConfirmationNotification(pendingTrip);
     }
 
-    // Reset to idle
     await saveDetectionContext({
       ...ctx,
       enabled: false,
@@ -424,5 +420,92 @@ export const finalizeCurrentTripAndStop = async (): Promise<void> => {
     });
   } catch (e) {
     console.error("[BG] finalizeCurrentTripAndStop failed:", e);
+  }
+};
+
+// ============================================================================
+// COLD-TRIP RECONCILIATION (Phase B Option 2)
+// Reads GPS points buffered natively during a cold trip and turns them
+// into a pending trip using the same distance math as the warm path.
+// ============================================================================
+const COLD_MOVEMENT_FLOOR_KMH = 3; // ignore parked/stationary GPS jitter
+
+export const reconcileColdTrip = async (): Promise<void> => {
+  try {
+    const raw = await BluetoothDetection.getBufferedPoints();
+    let points: BufferedPoint[] = [];
+    try {
+      points = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (points.length < 2) {
+      await BluetoothDetection.clearBufferedPoints();
+      return;
+    }
+
+    // resolve which vehicle this trip belongs to (saved natively on connect)
+    const address = await BluetoothDetection.getBufferedVehicleAddress();
+    const vehicles = await getVehicles();
+    const match = vehicles.find(
+      (v) => v.bluetoothAddress?.toLowerCase() === address.toLowerCase(),
+    );
+    if (!match) {
+      await BluetoothDetection.clearBufferedPoints();
+      return;
+    }
+    // then use match.id for vehicleId
+
+    const config = await getDetectionConfig();
+
+    let distanceKm = 0;
+    const speeds: number[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const segKm = haversineKm(
+        prev.latitude,
+        prev.longitude,
+        curr.latitude,
+        curr.longitude,
+      );
+      const dtHours = (curr.timestamp - prev.timestamp) / 3_600_000;
+      const segSpeedKmh = dtHours > 0 ? segKm / dtHours : 0;
+
+      if (segSpeedKmh >= COLD_MOVEMENT_FLOOR_KMH) {
+        distanceKm += segKm;
+        speeds.push(segSpeedKmh);
+      }
+    }
+
+    if (distanceKm < 0.1) {
+      await BluetoothDetection.clearBufferedPoints();
+      return;
+    }
+
+    const compensatedKm = distanceKm * config.roadCompensationFactor;
+    const avgSpeed = speeds.length
+      ? speeds.reduce((a, b) => a + b, 0) / speeds.length
+      : 0;
+    const maxSpeed = speeds.length ? Math.max(...speeds) : 0;
+
+    const pendingTrip: PendingTrip = {
+      id: uuidv4(),
+      vehicleId: match.id,
+      startTime: points[0].timestamp,
+      endTime: points[points.length - 1].timestamp,
+      distanceKm: parseFloat(compensatedKm.toFixed(2)),
+      snapshots: [],
+      averageSpeedKmh: parseFloat(avgSpeed.toFixed(1)),
+      maxSpeedKmh: parseFloat(maxSpeed.toFixed(1)),
+      status: "awaiting_confirmation",
+      createdAt: new Date().toISOString(),
+    };
+
+    await addPendingTrip(pendingTrip);
+    await sendTripConfirmationNotification(pendingTrip);
+    await BluetoothDetection.clearBufferedPoints();
+  } catch (e) {
+    console.error("[ColdTrip] reconcile failed:", e);
   }
 };

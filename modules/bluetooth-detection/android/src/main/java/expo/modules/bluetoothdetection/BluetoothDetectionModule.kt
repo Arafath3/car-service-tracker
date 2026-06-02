@@ -34,12 +34,10 @@ class BluetoothDetectionModule : Module() {
       unregisterReceiver()
     }
 
-    // Returns the phone's already-paired Bluetooth devices (name + address)
     AsyncFunction("getPairedDevices") {
       getPairedDevices()
     }
 
-    // Associate a vehicle's Bluetooth device with the app via CDM (shows a system dialog)
     AsyncFunction("associateVehicle") { address: String, promise: Promise ->
       if (Build.VERSION.SDK_INT < 33) {
         promise.reject("UNSUPPORTED", "CDM association needs Android 13+", null)
@@ -78,14 +76,12 @@ class BluetoothDetectionModule : Module() {
       })
     }
 
-    // Tell the system to wake our CompanionDeviceService when this device appears/disappears
     AsyncFunction("observeVehicle") { address: String ->
       if (Build.VERSION.SDK_INT < 33) return@AsyncFunction
       val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
       cdm.startObservingDevicePresence(address)
     }
 
-    // Remove an association (handy for testing / re-linking)
     AsyncFunction("disassociateVehicle") { address: String ->
       if (Build.VERSION.SDK_INT < 33) return@AsyncFunction
       val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
@@ -94,11 +90,27 @@ class BluetoothDetectionModule : Module() {
         .forEach { cdm.disassociate(it.id) }
     }
 
-    // List the MAC addresses currently associated (to verify it stuck)
     AsyncFunction("getAssociations") {
       if (Build.VERSION.SDK_INT < 33) return@AsyncFunction emptyList<String>()
       val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
       cdm.myAssociations.mapNotNull { it.deviceMacAddress?.toString() }
+    }
+
+    AsyncFunction("getBufferedPoints") {
+      val file = java.io.File(context.filesDir, "cold_trip_points.json")
+      if (!file.exists()) return@AsyncFunction "[]"
+      file.readText()
+    }
+
+    AsyncFunction("clearBufferedPoints") {
+      val file = java.io.File(context.filesDir, "cold_trip_points.json")
+      if (file.exists()) file.delete()
+    }
+
+    AsyncFunction("getBufferedVehicleAddress") {
+      val file = java.io.File(context.filesDir, "cold_trip_vehicle.txt")
+      if (!file.exists()) return@AsyncFunction ""
+      file.readText()
     }
 
     Function("startKeepAlive") {
@@ -113,7 +125,6 @@ class BluetoothDetectionModule : Module() {
     Function("stopKeepAlive") {
       context.stopService(Intent(context, MonitoringService::class.java))
     }
-    
 
     OnDestroy {
       unregisterReceiver()

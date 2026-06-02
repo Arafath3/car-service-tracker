@@ -36,6 +36,7 @@ import {
 import {
   stopPassiveDetection,
   isPassiveDetectionActive,
+  reconcileColdTrip,
 } from "@/lib/passiveDetectionService";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
@@ -98,6 +99,9 @@ export default function PassiveDetectionScreen() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
+    reconcileColdTrip().catch((e) =>
+      console.log("[ColdTrip] reconcile failed:", e),
+    );
 
     const [
       [vError, v],
@@ -299,6 +303,8 @@ export default function PassiveDetectionScreen() {
     const d = new Date(ts);
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
+
+  // test button
   const testCdmAssociate = async () => {
     try {
       // 1. clear any existing associations first (await it)
@@ -316,6 +322,16 @@ export default function PassiveDetectionScreen() {
       console.log(
         "[CDM] all associations:",
         await BluetoothDetection.getAssociations(),
+      );
+
+      const raw = await BluetoothDetection.getBufferedPoints();
+      const points = JSON.parse(raw);
+      console.log("[Buffer] got", points.length, "points");
+      console.log(
+        "[Buffer] first:",
+        points[0],
+        "last:",
+        points[points.length - 1],
       );
     } catch (e) {
       console.log("[CDM] associate error:", e);
