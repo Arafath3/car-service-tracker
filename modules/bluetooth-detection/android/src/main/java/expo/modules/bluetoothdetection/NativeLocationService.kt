@@ -1,5 +1,4 @@
 package expo.modules.bluetoothdetection
-
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -33,12 +32,33 @@ class NativeLocationService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    startAsForeground()
+    // Permission could have been revoked since the user enabled detection.
+    // If so, NEVER call startForeground with a location type — it throws and crashes the app.
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        != PackageManager.PERMISSION_GRANTED) {
+      Log.d("BT_LOC", "Location permission missing; not starting")
+      stopSelf()
+      return START_NOT_STICKY
+    }
+
+    val address = intent?.getStringExtra("address") ?: ""
+    try {
+      File(filesDir, "cold_trip_vehicle.txt").writeText(address)
+    } catch (e: Exception) {
+      Log.d("BT_LOC", "vehicle-address write FAILED: ${e.message}")
+    }
+
+    if (!startAsForeground()) {
+      // Couldn't enter foreground — bail cleanly instead of leaving a zombie service
+      stopSelf()
+      return START_NOT_STICKY
+    }
+
     startLocationUpdates()
     return START_STICKY
   }
 
-  private fun startAsForeground() {
+  private fun startAsForeground(): Boolean {
     val channelId = "native_location"
     val nm = getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -46,25 +66,29 @@ class NativeLocationService : Service() {
         NotificationChannel(channelId, "Trip Tracking", NotificationManager.IMPORTANCE_LOW)
       )
     }
+
     val notification: Notification = NotificationCompat.Builder(this, channelId)
       .setContentTitle("Service Tracker")
       .setContentText("Tracking your trip…")
       .setSmallIcon(android.R.drawable.ic_menu_mylocation)
       .setOngoing(true)
       .build()
-    try {
+
+    return try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         startForeground(4245, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
       } else {
         startForeground(4245, notification)
       }
-      Log.d("BT_LOC", "Foreground service started")
+      true
     } catch (e: Exception) {
       Log.d("BT_LOC", "startForeground FAILED: ${e.message}")
+      false
     }
   }
 
   private fun startLocationUpdates() {
+    // onStartCommand already verified permission, but check again defensively
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         != PackageManager.PERMISSION_GRANTED) {
       Log.d("BT_LOC", "No fine-location permission; stopping")
@@ -80,7 +104,6 @@ class NativeLocationService : Service() {
     callback = object : LocationCallback() {
       override fun onLocationResult(result: LocationResult) {
         for (loc: Location in result.locations) {
-          Log.d("BT_LOC", "lat=${loc.latitude} lng=${loc.longitude} spd=${loc.speed} mock=${loc.isMock}")
           bufferPoint(loc)
         }
       }
@@ -88,9 +111,9 @@ class NativeLocationService : Service() {
 
     try {
       fusedClient?.requestLocationUpdates(request, callback!!, Looper.getMainLooper())
-      Log.d("BT_LOC", "Requested location updates")
     } catch (e: Exception) {
       Log.d("BT_LOC", "requestLocationUpdates FAILED: ${e.message}")
+      stopSelf()
     }
   }
 
@@ -109,5 +132,10 @@ class NativeLocationService : Service() {
     } catch (e: Exception) {
       Log.d("BT_LOC", "bufferPoint FAILED: ${e.message}")
     }
+  }
+
+  override fun onDestroy() {
+    callback?.let { fusedClient?.removeLocationUpdates(it) }
+    super.onDestroy()
   }
 }

@@ -332,39 +332,6 @@ export default function PassiveDetectionScreen() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
-  // test button
-  const testCdmAssociate = async () => {
-    try {
-      // 1. clear any existing associations first (await it)
-      await BluetoothDetection.disassociateVehicle("34:09:C9:12:03:2D");
-
-      // 2. associate — must complete before observing
-      const result =
-        await BluetoothDetection.associateVehicle("34:09:C9:12:03:2D");
-      console.log("[CDM] associated:", result);
-
-      // 3. only now start observing (await it)
-      await BluetoothDetection.observeVehicle("34:09:C9:12:03:2D");
-      console.log("[CDM] now observing");
-
-      console.log(
-        "[CDM] all associations:",
-        await BluetoothDetection.getAssociations(),
-      );
-
-      const raw = await BluetoothDetection.getBufferedPoints();
-      const points = JSON.parse(raw);
-      console.log("[Buffer] got", points.length, "points");
-      console.log(
-        "[Buffer] first:",
-        points[0],
-        "last:",
-        points[points.length - 1],
-      );
-    } catch (e) {
-      console.log("[CDM] associate error:", e);
-    }
-  };
   const linkingVehicle =
     vehicles.find((v) => v.id === linkingVehicleId) ?? null;
   const linkingVehicleName =
@@ -509,20 +476,6 @@ export default function PassiveDetectionScreen() {
             thumbColor={autoEnabled ? "#fff" : theme.colors.textMuted}
           />
         </View>
-        {/* need to be removed here for testing */}
-        <TouchableOpacity
-          onPress={testCdmAssociate}
-          style={{
-            padding: 16,
-            backgroundColor: "#444",
-            borderRadius: 8,
-            marginVertical: 12,
-          }}
-        >
-          <Text style={{ color: "#fff", textAlign: "center" }}>
-            TEST CDM ASSOCIATE
-          </Text>
-        </TouchableOpacity>
         {/* Demo mode toggle */}
         <TouchableOpacity
           style={styles.demoToggleRow}

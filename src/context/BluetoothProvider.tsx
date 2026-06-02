@@ -36,7 +36,6 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         );
         if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-          console.log("[BT] permission not granted; listener not started");
           return;
         }
       }
@@ -44,7 +43,6 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
 
       BluetoothDetection.startListening();
       startedRef.current = true;
-      console.log("[BT] provider listening (app-wide)");
 
       connectedSub = BluetoothDetection.addListener(
         "onBluetoothConnected",
@@ -55,23 +53,10 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
           const vehicles = await getVehicles();
           const match = vehicles.find((v) => v.bluetoothAddress === address);
           if (!match) {
-            console.log(
-              "[BT] connected, not linked, ignoring:",
-              device?.name ?? "Unknown",
-              address,
-            );
             return;
           }
-          console.log(
-            "[BT] MATCHED → auto-starting detection for",
-            match.make,
-            match.model,
-          );
+
           const result = await startPassiveDetection(match.id);
-          console.log(
-            "[BT] startPassiveDetection result:",
-            JSON.stringify(result),
-          );
           if (!result.success) {
             console.warn("[BT] auto-start failed:", result.error);
           }
@@ -90,11 +75,6 @@ export const BluetoothProvider: React.FC<{ children: ReactNode }> = ({
           // only finalize if the disconnected vehicle is the one being tracked
           const ctx = await getDetectionContext();
           if (ctx?.selectedVehicleId === match.id) {
-            console.log(
-              "[BT] MATCHED disconnect → finalizing trip for",
-              match.make,
-              match.model,
-            );
             await finalizeCurrentTripAndStop();
           }
         },

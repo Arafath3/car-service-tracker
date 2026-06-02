@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class MonitoringService : Service() {
@@ -21,6 +22,7 @@ class MonitoringService : Service() {
         NotificationChannel(channelId, "Trip Monitoring", NotificationManager.IMPORTANCE_LOW)
       )
     }
+
     val notification: Notification = NotificationCompat.Builder(this, channelId)
       .setContentTitle("Service Tracker")
       .setContentText("Ready to detect trips automatically")
@@ -28,11 +30,18 @@ class MonitoringService : Service() {
       .setOngoing(true)
       .build()
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(4244, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-    } else {
-      startForeground(4244, notification)
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        startForeground(4244, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+      } else {
+        startForeground(4244, notification)
+      }
+      START_STICKY // if the OS kills it, restart it
+    } catch (e: Exception) {
+      // Couldn't enter foreground (e.g. background-start restriction) — don't leave a zombie
+      Log.d("BT_LOC", "MonitoringService startForeground FAILED: ${e.message}")
+      stopSelf()
+      START_NOT_STICKY
     }
-    return START_STICKY  // if the OS kills it, restart it
   }
 }

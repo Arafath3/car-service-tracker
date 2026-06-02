@@ -437,6 +437,7 @@ export const reconcileColdTrip = async (): Promise<void> => {
     try {
       points = JSON.parse(raw);
     } catch {
+      await BluetoothDetection.clearBufferedPoints();
       return;
     }
     if (points.length < 2) {
