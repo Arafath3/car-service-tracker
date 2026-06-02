@@ -1,29 +1,59 @@
 # Service Tracker — Car & Motorbike Service Reminder App
 
-A React Native + TypeScript app built with Expo (Android-focused) that tracks vehicle mileage and reminds you when services are due. It now includes **passive driving detection** using a state-machine + GPS rolling-window classifier.
+A React Native + TypeScript app built with Expo (Android-focused) that tracks vehicle mileage and reminds you when a service is due. Its standout feature is **automatic, Bluetooth-triggered trip detection** that logs your drives with little to no manual input — and, on Android 13+, can detect a trip **even when the app has been fully closed**.
 
-## Features
-
-✅ **Login / Signup / Guest Mode** — Local-only auth, no server needed
-✅ **Multiple Vehicles** — Add cars and motorbikes to your garage
-✅ **Manual GPS Trip Tracking** — Start/stop a trip, track distance live
-✅ **🆕 Passive Driving Detection** — App detects driving in the background
-✅ **State-machine Detection Engine** — idle → monitoring → moving → driving → stopped → validating → confirmation
-✅ **Trip Confirmation via Notification** — Asks user to confirm detected trips
-✅ **Auto Odometer Update** — Confirmed trips automatically update vehicle mileage
-✅ **Service Schedule** — Built-in service intervals for cars and motorbikes
-✅ **Charts & Dashboard** — Mileage history line chart + service health progress chart
-✅ **Service History** — Log past services with cost and notes
-✅ **State Machine Debug Panel** — Watch state transitions live for assignment demo
+> **Origins:** This started as a university assignment (a basic mileage tracker, since submitted). The automatic and cold-start detection described below were built afterward as a side project and go well beyond the original spec.
 
 ---
 
-## Setup Instructions (Android)
+## Features
+
+- **Login / Signup / Guest Mode** — guests are local-only; registered users sync to the cloud (Firebase)
+- **Multiple Vehicles** — add cars and motorbikes to your garage
+- **Manual GPS Trip Tracking** — start/stop a trip and watch distance update live
+- **Automatic Bluetooth Trip Detection** — link a vehicle's Bluetooth device (car stereo, FM/cigarette-lighter adapter, helmet intercom, etc.); trips start and stop automatically when you connect/disconnect
+- **Cold-Start Detection (Android 13+)** — detects and logs trips even when the app is fully swiped away, using Android's CompanionDeviceManager plus a native location service
+- **State-Machine Detection Engine** — `idle → monitoring → moving → driving → stopped → validating → awaiting_confirmation`
+- **Trip Confirmation via Notification** — you confirm or reject each detected trip
+- **Auto Odometer Update** — confirmed trips update the vehicle's mileage
+- **Service Schedule** — built-in service intervals for cars and motorbikes, plus custom intervals
+- **Charts & Dashboard** — mileage history and service-health visualizations
+- **Service History** — log past services with cost and notes
+
+---
+
+## How Detection Works (Two Layers)
+
+Detection is built in two layers so it can react both when the app is alive and when it's been killed.
+
+### Warm path — app alive or backgrounded
+
+1. A native Bluetooth module listens for Bluetooth connect/disconnect events.
+2. When a **linked** vehicle's Bluetooth connects, the app starts passive GPS detection (the state machine).
+3. GPS feeds the state machine, which classifies movement and accumulates trip distance.
+4. When the vehicle's Bluetooth disconnects, the trip is finalized and you get a confirmation notification.
+
+This means GPS only runs **during a drive**, not constantly — the Bluetooth connection is a cheap, high-confidence signal for "a trip is happening," which keeps battery use low.
+
+### Cold path — app fully killed (Android 13+ only)
+
+Android blocks apps from starting a location foreground service from the background, so a normal background listener can't begin GPS tracking from a cold start. The app works around this using the **CompanionDeviceManager (CDM)**, Android's official mechanism for reacting to a companion device:
+
+1. Each vehicle's Bluetooth device is **associated** via CDM (a one-time system consent dialog when you link it).
+2. CDM wakes the app when that device appears — **even if the app has been swiped away**.
+3. A **native (Kotlin) foreground location service** collects GPS points. Because it's started via the CDM exemption, it's allowed to run and keep location access from the background — something `expo-location` cannot do.
+4. GPS points are buffered to disk during the trip.
+5. The next time the app opens, JavaScript reads the buffered points and reconciles them into a pending trip using the same distance math as the warm path.
+
+---
+
+## Setup (Android)
 
 ### 1. Prerequisites
-- **Node.js 18+** ([download](https://nodejs.org/))
-- **Android Studio** (for the Android SDK + emulator) OR a real Android phone with USB debugging
-- **Java JDK 17** (Android Studio usually installs this for you)
+
+- **Node.js 18+**
+- **Android Studio** (for the Android SDK) or a real Android device with USB debugging
+- **Java JDK 17**
 
 ### 2. Install dependencies
 
@@ -31,51 +61,46 @@ A React Native + TypeScript app built with Expo (Android-focused) that tracks ve
 npm install
 ```
 
-If you hit dependency errors: `npm install --legacy-peer-deps`
+If you hit peer-dependency errors: `npm install --legacy-peer-deps`
 
-### 3. Build a custom dev client (REQUIRED for passive detection)
+### 3. Build a custom dev client (required)
 
-⚠️ **Important**: The passive detection feature uses background location, which **does not work in Expo Go**. You must build a custom dev client.
+Background location **and** the native Bluetooth/CDM module do **not** work in Expo Go. You must build a custom dev client:
 
 ```bash
-# Generate Android native project
-npx expo prebuild --platform android
-
-# Build and install on your device/emulator
+npx expo prebuild --clean --platform android
 npx expo run:android
 ```
 
-This takes 5–15 minutes the first time. After that, it's much faster.
+The first build takes several minutes; later builds are faster.
 
-### 4. Open the app
-
-The custom build will install automatically. Look for the `CarServiceTracker` app icon.
+> Package name: `com.arafath.servicetracker`. If you reinstall and hit a "signatures do not match" error, run `adb uninstall com.arafath.servicetracker` first.
 
 ---
 
-## How to Test the Passive Detection Feature
+## Using Automatic Detection
 
-1. **Open the app** → log in or continue as guest
-2. **Add a vehicle** with current odometer reading
-3. From the home screen, tap **"Auto-detect Trips"**
-4. **Select your vehicle**
-5. **Toggle "Background Detection" ON**
-   - Grant **"Allow all the time"** for location (required for background)
-   - Grant **notifications** permission (Android 13+)
-6. The app will now start monitoring. State will be `MONITORING`.
-7. **Close the app** and **drive somewhere** (or take a long bus/car ride)
-8. As you move, the state will transition: `monitoring → moving → driving`
-9. When you stop for 5+ minutes, you'll get a **notification asking to confirm the trip**
-10. Tap the notification → review the trip → tap **"Yes, save this trip"**
-11. The trip distance is added to your vehicle's odometer
+1. Add a vehicle with its current odometer reading.
+2. Open the **Automatic Detection** screen.
+3. **Tap a vehicle row** to link its Bluetooth device, then pick the device from the list.
+   - On Android 13+, confirm the system **companion device** dialog — this is what enables cold-start detection.
+4. Toggle the **Automatic Detection** master switch on, and grant:
+   - Location **"Allow all the time"** (required for background tracking)
+   - Notifications (Android 13+)
+5. Connect to that vehicle's Bluetooth and drive — the trip starts automatically (the vehicle row shows a **TRACKING** badge).
+6. Disconnect (e.g. engine off) — the trip is finalized and you get a confirmation notification.
+7. Tap the notification, review the trip, and confirm — the distance is added to the vehicle's odometer.
 
-### Testing without driving
+### Testing without a real car
 
-If you can't actually drive, you can validate the state machine by:
-1. Opening the **Passive Detection** screen
-2. Toggling **STATE MACHINE LOG** open
-3. Walking around for a few minutes — you'll see snapshots logged but no driving trigger (correctly classified as walking)
-4. Adjusting `CONFIG.DRIVING_MIN_KMH` in `src/utils/detectionEngine.ts` to a lower value (e.g. 5 km/h) to test driving detection at walking speed
+You can validate the full pipeline using a stand-in Bluetooth device and a mock-location app:
+
+1. Pair any Bluetooth device (e.g. earbuds) and link it to a vehicle.
+2. Set **Lockito** as the mock-location app in Developer Options, and play a **moving route** (not a fixed pin).
+3. Turn on **Demo Mode** in the app, which lowers the driving threshold so simulated speeds register.
+4. Connect the device, let the route play, then disconnect.
+
+> **Important:** Simulator testing validates the _logic_ (state transitions, trip creation, cold-start wake). It does **not** validate real-world distance accuracy, because mock GPS points are clean and evenly spaced. Real distance accuracy and the compensation factor must be checked on an actual drive.
 
 ---
 
@@ -83,135 +108,111 @@ If you can't actually drive, you can validate the state machine by:
 
 ### State Machine
 
-The detection engine uses a **state machine** with the following states:
-
-| State | Description |
-|---|---|
-| `idle` | Detection turned off |
-| `monitoring` | Background snapshots running, waiting for movement |
-| `moving` | Movement detected, evaluating if it's driving (vs walking) |
-| `driving` | Confirmed driving, accumulating distance |
-| `stopped` | Speed dropped, may be end of trip (red light? real stop?) |
-| `validating` | 5-minute wait window before declaring trip ended |
-| `awaiting_confirmation` | User notification sent, waiting for response |
+| State                   | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| `idle`                  | Detection off                                                   |
+| `monitoring`            | Watching GPS, waiting for movement                              |
+| `moving`                | Movement detected, evaluating whether it's driving (vs walking) |
+| `driving`               | Confirmed driving, accumulating distance                        |
+| `stopped`               | Speed dropped — possible end of trip                            |
+| `validating`            | Wait window before declaring the trip ended                     |
+| `awaiting_confirmation` | Notification sent, waiting for the user's response              |
 
 ### Event-Driven, Not Polling
 
-The app does **not poll** for location. Instead:
-1. We register a `TaskManager.defineTask` callback at module load
-2. We call `Location.startLocationUpdatesAsync` to subscribe to GPS events
-3. Android wakes our task only when:
-   - The user moves 50+ meters, OR
-   - 30+ seconds have passed
-4. The task runs the state machine, persists context, may send a notification
-5. The app goes back to sleep — no continuous loop, no constant battery drain
+The app never polls. It registers a `TaskManager.defineTask` callback and subscribes to GPS via `Location.startLocationUpdatesAsync`. Android wakes the task only when the device moves far enough or enough time passes; the task runs the state machine, persists context, and goes back to sleep.
 
-### Rolling Window Classification
+### Rolling-Window Classification
 
-Decisions are not made on single readings (which can be noisy). Instead, a 10-snapshot rolling window is maintained, and metrics are computed:
-
-- **Average speed** over the window
-- **Max speed**
-- **Speed consistency** (1 - normalized stddev) — driving is smoother than walking
-- **Stop frequency** — fraction of readings stationary
-- **Consecutive driving readings** — need 2+ in a row to confirm driving
-- **Consecutive stopped readings** — need 2+ in a row to suspect end of trip
-
-This is what makes the classifier robust against GPS noise and momentary anomalies.
+Decisions use a rolling window of recent snapshots rather than single (noisy) readings — average speed, max speed, speed consistency, stop frequency, and consecutive-driving/stopped counts — making the classifier robust against GPS jitter.
 
 ### Distance Calculation
 
-Distance between consecutive GPS points is calculated with the **Haversine formula** (great-circle distance on a sphere). A **1.15× compensation factor** is applied at trip completion because GPS samples capture straight-line distances between waypoints, while real roads curve. This is a common approximation used in fitness/driving apps.
+Distance between consecutive GPS points uses the **Haversine formula**. A **compensation factor** (default `1.15`) is applied at trip completion because sparse GPS samples capture straight lines between waypoints while real roads curve. _This factor should be tuned against real-world drives._
 
-### Persistence
+### Native Module (`modules/bluetooth-detection`)
 
-The detection context is saved to `AsyncStorage` after every snapshot. This means even if the OS kills the app, the next time the task runs we resume from where we left off — no state loss.
+A local Expo module written in Kotlin handles everything Android-native:
+
+- Bluetooth connect/disconnect listening
+- CompanionDeviceManager association and presence observation
+- A `CompanionDeviceService` that the OS wakes on device appearance/disappearance (cold-start)
+- A `FusedLocationProvider`-based foreground service for native GPS collection during cold trips
+- Buffering GPS points to disk and exposing them to JavaScript
+
+### Storage
+
+Hybrid: **guests** store everything locally in `AsyncStorage`; **registered users** sync vehicles and services to **Firestore** (Firebase modular SDK). Trips and raw GPS are always local. Detection context is persisted after every snapshot, so the state survives the OS killing the app.
 
 ---
 
 ## Project Structure
 
 ```
-CarServiceApp/
-├── App.tsx                                  # Root - imports background task
-├── app.json                                 # Expo config + Android permissions
-├── package.json                             # Dependencies
+car-service-tracker/
+├── index.js                          # Entry: registers the headless task, then loads expo-router
+├── app.json                          # Expo config + Android permissions
+├── package.json
+├── modules/
+│   └── bluetooth-detection/          # Local native (Kotlin) module
+│       ├── src/                      # TS interface (BluetoothDetectionModule.ts, types)
+│       └── android/.../bluetoothdetection/
+│           ├── BluetoothDetectionModule.kt        # Bluetooth listener + CDM functions
+│           ├── BluetoothConnectionReceiver.kt     # Manifest broadcast receiver
+│           ├── CompanionDeviceTrackingService.kt  # CDM presence service (cold wake)
+│           ├── NativeLocationService.kt           # Native GPS collection (cold trips)
+│           ├── MonitoringService.kt               # Keep-alive foreground service
+│           └── AndroidManifest.xml
 └── src/
-    ├── components/                          # Reusable UI
-    ├── context/AuthContext.tsx
-    ├── navigation/RootNavigator.tsx
-    ├── screens/
-    │   ├── LoginScreen.tsx
-    │   ├── SignupScreen.tsx
-    │   ├── HomeScreen.tsx                   # + passive detection card
-    │   ├── AddVehicleScreen.tsx
-    │   ├── VehicleDetailScreen.tsx
-    │   ├── TrackTripScreen.tsx              # Manual trip tracking
-    │   ├── AddServiceScreen.tsx
-    │   ├── PassiveDetectionScreen.tsx       # 🆕 Passive detection control
-    │   └── ConfirmTripScreen.tsx            # 🆕 Confirm/reject pending trip
+    ├── app/                          # Expo Router screens
+    │   └── (app)/
+    │       ├── _layout.tsx           # Wraps the app in BluetoothProvider
+    │       └── detection/index.tsx   # Automatic Detection screen
+    ├── components/                   # ThemedAlert, BluetoothPickerModal, etc.
+    ├── context/
+    │   ├── AuthContext.tsx
+    │   └── BluetoothProvider.tsx     # App-wide Bluetooth listener (warm path)
+    ├── hooks/                        # useVehicles, useServices
+    ├── lib/
+    │   ├── storage.ts                # Hybrid storage, detection context, pending trips
+    │   ├── detectionEngine.ts        # State machine + classifier
+    │   ├── passiveDetectionService.ts# Background task, control API, cold-trip reconcile
+    │   ├── serviceIntervals.ts
+    │   └── notifications.ts
     ├── theme/
-    ├── types/index.ts                       # + DetectionState, PendingTrip, etc.
-    └── utils/
-        ├── storage.ts                       # + detection context, pending trips
-        ├── serviceIntervals.ts
-        ├── detectionEngine.ts               # 🆕 State machine + classifier
-        ├── passiveDetectionService.ts       # 🆕 Background task + control API
-        └── notificationSetup.ts             # 🆕 Notification handling
+    └── types/index.ts
 ```
 
 ---
 
 ## Tunable Parameters
 
-All thresholds live in `src/utils/detectionEngine.ts` under `CONFIG`. You can adjust:
+Detection thresholds live in `src/lib/detectionEngine.ts` (and the stored detection config). Key values:
 
 ```typescript
-DRIVING_MIN_KMH: 15,                  // Minimum speed to be "driving"
-CONSECUTIVE_DRIVING_REQUIRED: 2,      // Readings needed to confirm driving
-VALIDATION_DURATION_MS: 5 * 60 * 1000, // 5 minutes wait before notification
-ROLLING_WINDOW_SIZE: 10,              // Snapshots in rolling window
-ROAD_COMPENSATION_FACTOR: 1.15,       // Multiplier for GPS straight-line bias
+drivingMinKmh; // Minimum speed to count as "driving" (lowered in Demo Mode)
+movementMinKmh; // Floor for "moving" vs stationary
+rollingWindowSize; // Snapshots kept in the rolling window
+roadCompensationFactor; // Multiplier for GPS straight-line bias (default 1.15)
 ```
+
+**Demo Mode** lowers the driving threshold and shortens the validation window so the state machine can be exercised at walking speed or with a GPS simulator.
 
 ---
 
 ## Limitations & Future Work
 
-| Limitation | Why | Workaround |
-|---|---|---|
-| Won't run in Expo Go | Background location requires native code | Use `npx expo prebuild` + `expo run:android` |
-| OS may delay snapshots | Android battery optimization on per-vendor (Samsung, Xiaomi etc) | Disable battery optimization for the app |
-| Doesn't work if app is force-killed | Foreground service notification is needed to keep alive | Don't swipe the app away |
-| Distance is estimated | GPS samples are sparse to save battery | 1.15× compensation factor improves accuracy |
-| No accelerometer-triggered wake | Accelerometer doesn't run in background | OS-driven location updates serve the same purpose more efficiently |
+| Limitation                                  | Why                                                               | Notes / Workaround                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Cold-start needs Android 13+                | CompanionDeviceManager presence API requires API 33+              | On older Android, only the warm path works (app must be alive or backgrounded)        |
+| OEM battery managers can interfere          | Samsung, Xiaomi, etc. aggressively kill background apps           | Disable battery optimization for the app for reliable cold-start wakes                |
+| Real-world distance not yet validated       | All testing so far used a GPS simulator (clean, synthetic points) | Tune `roadCompensationFactor` against real drives vs. a known odometer/route distance |
+| Multiple cold trips merge                   | One cold-trip buffer per app-open cycle                           | Splitting on the disconnect boundary is planned                                       |
+| `expo-location` can't start from background | Platform restriction on background location foreground services   | Cold trips use the native `FusedLocationProvider` service instead                     |
+| No accelerometer wake                       | Sensors don't run reliably in the background                      | Bluetooth connection + CDM presence serve the same purpose more efficiently           |
 
 ---
 
-## Assignment Mapping
+## Notes
 
-This implements every requirement from the assignment spec:
-
-| Spec Requirement | Implementation |
-|---|---|
-| Event-driven not polling | TaskManager + Location.startLocationUpdates |
-| Idle by default | `state: 'idle'` until user toggles |
-| Activate on movement | `monitoring → moving` transition on first speed reading |
-| Collect GPS, speed, timestamps | `LocationSnapshot` interface |
-| Rolling time window | `recentSnapshots` array, `ROLLING_WINDOW_SIZE` |
-| Average speed, consistency, stop frequency | `computeWindowMetrics()` |
-| Boolean driving classification | `isDriving(metrics)` |
-| Distance only while driving | `applyStateTransitionEffects` only adds km in driving state |
-| Detect transition out of driving | `hasStoppedDriving(metrics)` |
-| Validation phase with timer | `validating` state with `VALIDATION_DURATION_MS = 5min` |
-| User confirmation notification | `sendTripConfirmationNotification()` |
-| Persist or discard based on choice | `ConfirmTripScreen` with confirm/reject |
-| Defined states with transitions | 7-state machine in `detectionEngine.ts` |
-| Battery optimized | distanceInterval=50m + timeInterval=30s, no JS polling |
-| Background platform compliance | Android `FOREGROUND_SERVICE_LOCATION`, persistent notification |
-
----
-
-## Author Notes
-
-The passive detection module is designed to be a faithful implementation of the assignment spec while being honest about React Native + Android constraints. The classifier and state machine logic is fully general — you can swap the snapshot source (GPS vs accelerometer-triggered GPS vs activity recognition) without changing the engine.
+The detection engine is source-agnostic — the state machine and classifier don't care whether snapshots come from `expo-location` (warm path) or the native GPS service (cold path). Bluetooth is used purely as a high-confidence trigger for _when_ a trip is happening, which keeps GPS — and battery — off except during actual drives.
