@@ -273,15 +273,31 @@ export default function PassiveDetectionScreen() {
       try {
         await BluetoothDetection.disassociateVehicle(vehicle.bluetoothAddress);
       } catch (e) {
-        console.log("[CDM] disassociate failed:", e);
+        console.error("[CDM] disassociate failed:", e);
       }
     }
     await updateVehicle({
       ...vehicle,
-      bluetoothAddress: undefined,
-      bluetoothName: undefined,
+      bluetoothAddress: "",
+      bluetoothName: "",
     });
     await loadData();
+  };
+
+  const confirmUnlink = (vehicle: Vehicle) => {
+    if (!vehicle.bluetoothAddress) return; // nothing linked, ignore
+    setAlertConfig({
+      title: "Unlink Bluetooth?",
+      message: `Stop auto-detecting trips for ${vehicle.nickname || vehicle.make} when "${vehicle.bluetoothName}" connects?`,
+      buttons: [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unlink",
+          style: "destructive",
+          onPress: () => handleUnlink(vehicle),
+        },
+      ],
+    });
   };
 
   const handleSkipBluetooth = () => {
@@ -430,6 +446,8 @@ export default function PassiveDetectionScreen() {
                   setLinkingVehicleId(v.id);
                   setShowPicker(true);
                 }}
+                onLongPress={() => confirmUnlink(v)}
+                delayLongPress={400}
                 activeOpacity={0.85}
               >
                 <Text style={styles.vehicleEmoji}>
@@ -441,7 +459,7 @@ export default function PassiveDetectionScreen() {
                   </Text>
                   <Text style={styles.vehicleSub}>
                     {v.bluetoothName
-                      ? `🔗 ${v.bluetoothName}`
+                      ? `🔗 ${v.bluetoothName} · hold to unlink`
                       : "Not linked — tap to link Bluetooth"}
                   </Text>
                 </View>

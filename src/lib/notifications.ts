@@ -1,10 +1,9 @@
-import * as Notifications from 'expo-notifications';
-import { router } from 'expo-router';
+import * as Notifications from "expo-notifications";
+import { router } from "expo-router";
 
 // SDK 55: shouldShowBanner and shouldShowList replace shouldShowAlert
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
@@ -22,14 +21,14 @@ export const configureNotificationListeners = (): (() => void) => {
       const data = response.notification.request.content.data as
         | { pendingTripId?: string; type?: string }
         | undefined;
-      if (data?.type === 'trip_confirmation' && data?.pendingTripId) {
+      if (data?.type === "trip_confirmation" && data?.pendingTripId) {
         // expo-router can navigate via the global router
         router.push({
-          pathname: '/(app)/detection/confirm',
+          pathname: "/(app)/detection/confirm",
           params: { id: data.pendingTripId },
         });
       }
-    }
+    },
   );
 
   return () => {
