@@ -8,4 +8,6 @@ expo-env.d.ts
 .expo/.expo/
 # Android Keystore
 *.jks
-*.keystore
+*.keystoreandroid/build/
+modules/**/android/build/
+android/build/

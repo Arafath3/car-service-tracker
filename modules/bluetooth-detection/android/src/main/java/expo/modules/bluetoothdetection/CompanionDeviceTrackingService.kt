@@ -25,10 +25,4 @@ override fun onDeviceDisappeared(associationInfo: AssociationInfo) {
   stopService(Intent(this, NativeLocationService::class.java))
 }
 
-private fun startTask(address: String, event: String) {
-  val intent = Intent(this, TripHeadlessService::class.java)
-  intent.putExtra("address", address)
-  intent.putExtra("event", event)
-  startForegroundService(intent)
-}
 }

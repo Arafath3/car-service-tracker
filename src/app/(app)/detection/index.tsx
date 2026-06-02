@@ -235,6 +235,7 @@ export default function PassiveDetectionScreen() {
   const handlePickDevice = async (device: PairedDevice) => {
     setShowPicker(false);
     const vehicle = vehicles.find((v) => v.id === linkingVehicleId);
+
     if (vehicle) {
       const [err] = await safeAwait(
         updateVehicle({
@@ -243,6 +244,7 @@ export default function PassiveDetectionScreen() {
           bluetoothName: device.name,
         }),
       );
+
       if (err) {
         setAlertConfig({
           title: "Couldn't link device",
@@ -251,9 +253,35 @@ export default function PassiveDetectionScreen() {
         setLinkingVehicleId(null);
         return;
       }
-      await loadData(); // refresh so the new link shows on the row
+
+      // Register for cold-start detection (Android 13+). The link itself is
+      // already saved above, so even if this fails the warm path still works.
+      try {
+        await BluetoothDetection.associateVehicle(device.address);
+        await BluetoothDetection.observeVehicle(device.address);
+      } catch (e) {
+        console.error("[CDM] association failed (warm path still works):", e);
+      }
+
+      await loadData();
     }
+
     setLinkingVehicleId(null);
+  };
+  const handleUnlink = async (vehicle: Vehicle) => {
+    if (vehicle.bluetoothAddress) {
+      try {
+        await BluetoothDetection.disassociateVehicle(vehicle.bluetoothAddress);
+      } catch (e) {
+        console.log("[CDM] disassociate failed:", e);
+      }
+    }
+    await updateVehicle({
+      ...vehicle,
+      bluetoothAddress: undefined,
+      bluetoothName: undefined,
+    });
+    await loadData();
   };
 
   const handleSkipBluetooth = () => {
