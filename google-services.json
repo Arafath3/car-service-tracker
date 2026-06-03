@@ -12,7 +12,20 @@
           "package_name": "com.arafath.servicetracker"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "735398182032-k6nora2d5k2cmlducut4r93tm8825pi5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.arafath.servicetracker",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "735398182032-7hjj4m5dap6chhjj3939ketcllja3nrq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB9JPyCPKFfKC0Onc1dEughR5ykzX-G9w0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "735398182032-7hjj4m5dap6chhjj3939ketcllja3nrq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

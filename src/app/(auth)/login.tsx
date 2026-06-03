@@ -42,11 +42,9 @@ export default function LoginScreen() {
   } | null>(null);
 
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId:
-        "735398182032-045pt12rvm0djea02vo90kblc6rmn6rh.apps.googleusercontent.com",
-      offlineAccess: true,
-    });
+    const webClientId =
+      "735398182032-7hjj4m5dap6chhjj3939ketcllja3nrq.apps.googleusercontent.com";
+    GoogleSignin.configure({ webClientId, offlineAccess: true });
   }, []);
 
   const handleLogin = async () => {

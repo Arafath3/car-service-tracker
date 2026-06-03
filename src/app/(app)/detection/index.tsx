@@ -99,9 +99,7 @@ export default function PassiveDetectionScreen() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    reconcileColdTrip().catch((e) =>
-      console.log("[ColdTrip] reconcile failed:", e),
-    );
+    reconcileColdTrip().catch((e) => console.error(e));
 
     const [
       [vError, v],

@@ -11,3 +11,6 @@ expo-env.d.ts
 *.keystoreandroid/build/
 modules/**/android/build/
 android/build/
+coverage/
+debug.keystore.backup
+*.keystore
