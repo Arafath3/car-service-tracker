@@ -36,7 +36,7 @@ import {
 import {
   stopPassiveDetection,
   isPassiveDetectionActive,
-  reconcileColdTrip,
+  reconcileColdTrips,
 } from "@/lib/passiveDetectionService";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
@@ -99,7 +99,9 @@ export default function PassiveDetectionScreen() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    reconcileColdTrip().catch((e) => console.error(e));
+    reconcileColdTrips().catch((e) =>
+      console.error("[ColdTrip] reconcile failed:", e),
+    );
 
     const [
       [vError, v],

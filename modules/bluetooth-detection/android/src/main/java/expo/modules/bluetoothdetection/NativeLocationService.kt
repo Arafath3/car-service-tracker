@@ -1,4 +1,5 @@
 package expo.modules.bluetoothdetection
+
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -21,19 +22,17 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import java.io.File
-import org.json.JSONArray
 import org.json.JSONObject
 
 class NativeLocationService : Service() {
 
   private var fusedClient: FusedLocationProviderClient? = null
   private var callback: LocationCallback? = null
+  private var vehicleAddress: String = "unknown"
 
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    // Permission could have been revoked since the user enabled detection.
-    // If so, NEVER call startForeground with a location type — it throws and crashes the app.
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         != PackageManager.PERMISSION_GRANTED) {
       Log.d("BT_LOC", "Location permission missing; not starting")
@@ -41,15 +40,9 @@ class NativeLocationService : Service() {
       return START_NOT_STICKY
     }
 
-    val address = intent?.getStringExtra("address") ?: ""
-    try {
-      File(filesDir, "cold_trip_vehicle.txt").writeText(address)
-    } catch (e: Exception) {
-      Log.d("BT_LOC", "vehicle-address write FAILED: ${e.message}")
-    }
+    vehicleAddress = intent?.getStringExtra("address") ?: "unknown"
 
     if (!startAsForeground()) {
-      // Couldn't enter foreground — bail cleanly instead of leaving a zombie service
       stopSelf()
       return START_NOT_STICKY
     }
@@ -66,14 +59,12 @@ class NativeLocationService : Service() {
         NotificationChannel(channelId, "Trip Tracking", NotificationManager.IMPORTANCE_LOW)
       )
     }
-
     val notification: Notification = NotificationCompat.Builder(this, channelId)
       .setContentTitle("Service Tracker")
       .setContentText("Tracking your trip…")
       .setSmallIcon(android.R.drawable.ic_menu_mylocation)
       .setOngoing(true)
       .build()
-
     return try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         startForeground(4245, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
@@ -88,27 +79,21 @@ class NativeLocationService : Service() {
   }
 
   private fun startLocationUpdates() {
-    // onStartCommand already verified permission, but check again defensively
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         != PackageManager.PERMISSION_GRANTED) {
-      Log.d("BT_LOC", "No fine-location permission; stopping")
       stopSelf()
       return
     }
-
     fusedClient = LocationServices.getFusedLocationProviderClient(this)
-    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L)
-      .setMinUpdateIntervalMillis(3000L)
+    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000L)
+      .setMinUpdateIntervalMillis(5000L)
+      .setMinUpdateDistanceMeters(10f) // OS won't deliver hops < 10m → kills jitter at the source
       .build()
-
     callback = object : LocationCallback() {
       override fun onLocationResult(result: LocationResult) {
-        for (loc: Location in result.locations) {
-          bufferPoint(loc)
-        }
+        for (loc in result.locations) bufferPoint(loc)
       }
     }
-
     try {
       fusedClient?.requestLocationUpdates(request, callback!!, Looper.getMainLooper())
     } catch (e: Exception) {
@@ -117,18 +102,18 @@ class NativeLocationService : Service() {
     }
   }
 
+  // Append-only NDJSON: O(1) per write, and a kill mid-write damages only the last line.
   private fun bufferPoint(loc: Location) {
     try {
-      val file = File(filesDir, "cold_trip_points.json")
-      val arr = if (file.exists()) JSONArray(file.readText()) else JSONArray()
-      val point = JSONObject().apply {
+      val line = JSONObject().apply {
         put("latitude", loc.latitude)
         put("longitude", loc.longitude)
         put("timestamp", loc.time)
         put("speed", loc.speed.toDouble())
-      }
-      arr.put(point)
-      file.writeText(arr.toString())
+        put("accuracy", if (loc.hasAccuracy()) loc.accuracy.toDouble() else -1.0)
+        put("address", vehicleAddress)
+      }.toString()
+      File(filesDir, "coldtrip_active.ndjson").appendText(line + "\n")
     } catch (e: Exception) {
       Log.d("BT_LOC", "bufferPoint FAILED: ${e.message}")
     }

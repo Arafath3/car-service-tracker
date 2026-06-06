@@ -97,27 +97,34 @@ class BluetoothDetectionModule : Module() {
       cdm.myAssociations.mapNotNull { it.deviceMacAddress?.toString() }
     }
 
-   AsyncFunction("getBufferedPoints") {
-  val file = java.io.File(context.filesDir, "cold_trip_points.json")
-  if (!file.exists()) return@AsyncFunction "[]"
-  file.readText()
+   AsyncFunction("getCompletedTripFiles") {
+  context.filesDir.listFiles { f ->
+    f.name.startsWith("coldtrip_done_") && f.name.endsWith(".ndjson")
+  }?.map { it.name }?.sorted() ?: emptyList<String>()
 }
 
-AsyncFunction("isColdTripComplete") {
-  java.io.File(context.filesDir, "cold_trip_ended.flag").exists()
+AsyncFunction("readTripFile") { name: String ->
+  if (!isSafeTripName(name)) return@AsyncFunction ""
+  val f = java.io.File(context.filesDir, name)
+  if (f.exists()) f.readText() else ""
 }
 
-AsyncFunction("clearBufferedPoints") {
-  java.io.File(context.filesDir, "cold_trip_points.json").let { if (it.exists()) it.delete() }
-  java.io.File(context.filesDir, "cold_trip_ended.flag").let { if (it.exists()) it.delete() }
+AsyncFunction("deleteTripFile") { name: String ->
+  if (!isSafeTripName(name)) return@AsyncFunction
+  java.io.File(context.filesDir, name).let { if (it.exists()) it.delete() }
 }
 
-    AsyncFunction("getBufferedVehicleAddress") {
-      val file = java.io.File(context.filesDir, "cold_trip_vehicle.txt")
-      if (!file.exists()) return@AsyncFunction ""
-      file.readText()
-    }
-
+    // Missed-disconnect safety valve: if the active file hasn't been written
+// in maxAgeMs, the trip is clearly over — seal it so it can reconcile.
+AsyncFunction("sealStaleActiveTrip") { maxAgeMs: Double ->
+  val active = java.io.File(context.filesDir, "coldtrip_active.ndjson")
+  if (active.exists() && active.length() > 0L &&
+      System.currentTimeMillis() - active.lastModified() > maxAgeMs.toLong()) {
+    active.renameTo(
+      java.io.File(context.filesDir, "coldtrip_done_${System.currentTimeMillis()}.ndjson")
+    )
+  }
+}
     Function("startKeepAlive") {
       val intent = Intent(context, MonitoringService::class.java)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -138,6 +145,12 @@ AsyncFunction("clearBufferedPoints") {
 
   private val context: Context
     get() = requireNotNull(appContext.reactContext) { "React context is null" }
+
+  private fun isSafeTripName(name: String): Boolean =
+    name.startsWith("coldtrip_done_") &&
+    name.endsWith(".ndjson") &&
+    !name.contains("/") &&
+    !name.contains("..")
 
   private fun getPairedDevices(): List<Map<String, String>> {
     val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager

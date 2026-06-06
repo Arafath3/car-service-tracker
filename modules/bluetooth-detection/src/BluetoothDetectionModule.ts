@@ -15,10 +15,11 @@ declare class BluetoothDetectionModule extends NativeModule<BluetoothDetectionMo
   observeVehicle(address: string): Promise<void>;
   startKeepAlive(): void;
   stopKeepAlive(): void;
-  getBufferedPoints(): Promise<string>;
-  clearBufferedPoints(): Promise<void>;
-  getBufferedVehicleAddress(): Promise<string>;
-  isColdTripComplete(): Promise<boolean>;
+  // --- cold-trip buffer (per-trip files) ---
+  getCompletedTripFiles(): Promise<string[]>;
+  readTripFile(name: string): Promise<string>;
+  deleteTripFile(name: string): Promise<void>;
+  sealStaleActiveTrip(maxAgeMs: number): Promise<void>;
 }
 
 export default requireNativeModule<BluetoothDetectionModule>(

@@ -20,7 +20,7 @@ import {
   appendStateLog,
   getDetectionConfig,
   getVehicles,
-  DEFAULT_DETECTION_CONFIG,
+  getPendingTrips,
 } from "./storage";
 import {
   haversineKm,
@@ -31,13 +31,6 @@ import {
 } from "./detectionEngine";
 
 export const LOCATION_TASK_NAME = "PASSIVE_DETECTION_LOCATION_V1";
-
-type BufferedPoint = {
-  latitude: number;
-  longitude: number;
-  timestamp: number;
-  speed: number;
-};
 
 // ============================================================================
 // THE BACKGROUND TASK - registered at module load
@@ -428,36 +421,76 @@ export const finalizeCurrentTripAndStop = async (): Promise<void> => {
 // Reads GPS points buffered natively during a cold trip and turns them
 // into a pending trip using the same distance math as the warm path.
 // ============================================================================
-const COLD_MOVEMENT_FLOOR_KMH = 3; // ignore parked/stationary GPS jitter
+const COLD_MOVEMENT_FLOOR_KMH = 3; // ignore parked GPS drift
+const COLD_MAX_ACCURACY_M = 30; // reject fuzzy fixes
+const COLD_MIN_SEGMENT_M = 8; // ignore sub-jitter hops
+const COLD_MAX_PLAUSIBLE_KMH = 220; // drop GPS teleport glitches
+const STALE_ACTIVE_TRIP_MS = 15 * 60 * 1000; // missed-disconnect rescue window
 
-export const reconcileColdTrip = async (): Promise<void> => {
+interface BufferedPoint {
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+  speed?: number;
+  accuracy?: number;
+  address?: string;
+}
+
+const parseNdjson = (raw: string): BufferedPoint[] =>
+  raw
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => {
+      try {
+        return JSON.parse(l) as BufferedPoint;
+      } catch {
+        return null; // tolerate a torn final line from a killed write
+      }
+    })
+    .filter((p): p is BufferedPoint => p !== null);
+
+export const reconcileColdTrips = async (): Promise<void> => {
   try {
-    const complete = await BluetoothDetection.isColdTripComplete();
-    if (!complete) return;
-    const raw = await BluetoothDetection.getBufferedPoints();
-    let points: BufferedPoint[] = [];
-    try {
-      points = JSON.parse(raw);
-    } catch {
-      await BluetoothDetection.clearBufferedPoints();
-      return;
+    // 1. Rescue a trip whose disconnect callback was missed.
+    await BluetoothDetection.sealStaleActiveTrip(STALE_ACTIVE_TRIP_MS);
+
+    // 2. Drain every completed trip file independently — never merged.
+    const files = await BluetoothDetection.getCompletedTripFiles();
+    for (const name of files) {
+      await reconcileOneTripFile(name);
     }
+  } catch (e) {
+    console.error("[ColdTrip] reconcile failed:", e);
+  }
+};
+
+const reconcileOneTripFile = async (name: string): Promise<void> => {
+  try {
+    const raw = await BluetoothDetection.readTripFile(name);
+    const points = parseNdjson(raw);
+
     if (points.length < 2) {
-      await BluetoothDetection.clearBufferedPoints();
+      await BluetoothDetection.deleteTripFile(name);
       return;
     }
 
-    // resolve which vehicle this trip belongs to (saved natively on connect)
-    const address = await BluetoothDetection.getBufferedVehicleAddress();
+    // Deterministic id → reconciling the same file twice can't duplicate a trip.
+    const tripId = `cold-${name}`;
+    const existing = await getPendingTrips();
+    if (existing.some((t) => t.id === tripId)) {
+      await BluetoothDetection.deleteTripFile(name);
+      return;
+    }
+
+    const address = points.find((p) => p.address)?.address ?? "";
     const vehicles = await getVehicles();
     const match = vehicles.find(
       (v) => v.bluetoothAddress?.toLowerCase() === address.toLowerCase(),
     );
     if (!match) {
-      await BluetoothDetection.clearBufferedPoints();
+      await BluetoothDetection.deleteTripFile(name);
       return;
     }
-    // then use match.id for vehicleId
 
     const config = await getDetectionConfig();
 
@@ -466,6 +499,14 @@ export const reconcileColdTrip = async (): Promise<void> => {
     for (let i = 1; i < points.length; i++) {
       const prev = points[i - 1];
       const curr = points[i];
+
+      if (
+        curr.accuracy != null &&
+        curr.accuracy >= 0 &&
+        curr.accuracy > COLD_MAX_ACCURACY_M
+      ) {
+        continue;
+      }
       const segKm = haversineKm(
         prev.latitude,
         prev.longitude,
@@ -475,14 +516,16 @@ export const reconcileColdTrip = async (): Promise<void> => {
       const dtHours = (curr.timestamp - prev.timestamp) / 3_600_000;
       const segSpeedKmh = dtHours > 0 ? segKm / dtHours : 0;
 
-      if (segSpeedKmh >= COLD_MOVEMENT_FLOOR_KMH) {
-        distanceKm += segKm;
-        speeds.push(segSpeedKmh);
-      }
+      if (segKm * 1000 < COLD_MIN_SEGMENT_M) continue; // jitter hop
+      if (segSpeedKmh < COLD_MOVEMENT_FLOOR_KMH) continue; // parked drift
+      if (segSpeedKmh > COLD_MAX_PLAUSIBLE_KMH) continue; // GPS glitch
+
+      distanceKm += segKm;
+      speeds.push(segSpeedKmh);
     }
 
     if (distanceKm < 0.1) {
-      await BluetoothDetection.clearBufferedPoints();
+      await BluetoothDetection.deleteTripFile(name);
       return;
     }
 
@@ -493,7 +536,7 @@ export const reconcileColdTrip = async (): Promise<void> => {
     const maxSpeed = speeds.length ? Math.max(...speeds) : 0;
 
     const pendingTrip: PendingTrip = {
-      id: uuidv4(),
+      id: tripId,
       vehicleId: match.id,
       startTime: points[0].timestamp,
       endTime: points[points.length - 1].timestamp,
@@ -507,8 +550,11 @@ export const reconcileColdTrip = async (): Promise<void> => {
 
     await addPendingTrip(pendingTrip);
     await sendTripConfirmationNotification(pendingTrip);
-    await BluetoothDetection.clearBufferedPoints();
+
+    // Delete ONLY after the trip is safely persisted. If anything above
+    // throws, the file stays and the next reconcile retries it.
+    await BluetoothDetection.deleteTripFile(name);
   } catch (e) {
-    console.error("[ColdTrip] reconcile failed:", e);
+    console.error(`[ColdTrip] reconcile failed for ${name}:`, e);
   }
 };

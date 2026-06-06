@@ -1,36 +1,54 @@
 package expo.modules.bluetoothdetection
 
-import android.annotation.SuppressLint
 import android.companion.AssociationInfo
 import android.companion.CompanionDeviceService
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
-import android.content.Intent
 import java.io.File
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU) // API 33+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class CompanionDeviceTrackingService : CompanionDeviceService() {
 
-override fun onDeviceAppeared(associationInfo: AssociationInfo) {
-  val address = associationInfo.deviceMacAddress?.toString() ?: "unknown"
-  Log.d("BT_CDM", "onDeviceAppeared: $address")
-  try { File(filesDir, "cold_trip_ended.flag").delete() } catch (_: Exception) {}
-  val intent = Intent(this, NativeLocationService::class.java)
-  intent.putExtra("address", address)
-  startForegroundService(intent)
-}
+  private val activeFile get() = File(filesDir, "coldtrip_active.ndjson")
 
-override fun onDeviceDisappeared(associationInfo: AssociationInfo) {
-  val address = associationInfo.deviceMacAddress?.toString() ?: "unknown"
-  Log.d("BT_CDM", "onDeviceDisappeared: $address")
-  stopService(Intent(this, NativeLocationService::class.java))
-  // Mark the trip complete so JS knows it's safe to reconcile
-  try {
-    File(filesDir, "cold_trip_ended.flag").writeText("1")
-  } catch (e: Exception) {
-    Log.d("BT_CDM", "ended-flag write FAILED: ${e.message}")
+  override fun onDeviceAppeared(associationInfo: AssociationInfo) {
+    val address = associationInfo.deviceMacAddress?.toString() ?: "unknown"
+    Log.d("BT_CDM", "onDeviceAppeared: $address")
+
+    // A leftover active file means a previous disconnect was missed.
+    // Seal it as its own completed trip BEFORE starting a new one —
+    // never append onto it (no merge), never delete it (no loss).
+    sealActiveTrip()
+
+    val intent = Intent(this, NativeLocationService::class.java)
+    intent.putExtra("address", address)
+    startForegroundService(intent)
   }
-}
 
+  override fun onDeviceDisappeared(associationInfo: AssociationInfo) {
+    Log.d("BT_CDM", "onDeviceDisappeared")
+    stopService(Intent(this, NativeLocationService::class.java))
+    sealActiveTrip()
+  }
+
+  private fun sealActiveTrip() {
+    try {
+      val active = activeFile
+      when {
+        active.exists() && active.length() > 0L -> {
+          val done = File(filesDir, "coldtrip_done_${System.currentTimeMillis()}.ndjson")
+          if (!active.renameTo(done)) {
+            // rename can fail across edge cases; fall back to copy+delete
+            active.copyTo(done, overwrite = true)
+            active.delete()
+          }
+        }
+        active.exists() -> active.delete() // empty, nothing worth keeping
+      }
+    } catch (e: Exception) {
+      Log.d("BT_CDM", "sealActiveTrip FAILED: ${e.message}")
+    }
+  }
 }

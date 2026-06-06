@@ -1,17 +1,18 @@
-import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { theme } from '@/theme';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useRouter, useSegments } from 'expo-router';
-import { configureNotificationListeners } from '@/lib/notifications';
-
+import React, { useEffect } from "react";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { theme } from "@/theme";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { useRouter, useSegments } from "expo-router";
+import { configureNotificationListeners } from "@/lib/notifications";
+import { reconcileColdTrips } from "@/lib/passiveDetectionService";
+import { AppState } from "react-native";
 // IMPORTANT: This import registers the background task at module load,
 // before any UI renders. Required for Android to wake the app properly.
-import '@/lib/passiveDetectionService';
+import "@/lib/passiveDetectionService";
 
 const InitialLayout: React.FC = () => {
   const { user, loading } = useAuth();
@@ -20,13 +21,25 @@ const InitialLayout: React.FC = () => {
 
   useEffect(() => {
     if (loading) return;
-    const inAuthGroup = (segments[0] as string) === '(auth)';
+    const inAuthGroup = (segments[0] as string) === "(auth)";
     if (!user && !inAuthGroup) {
-      router.replace('/(auth)/login');
+      router.replace("/(auth)/login");
     } else if (user && inAuthGroup) {
-      router.replace('/(app)');
+      router.replace("/(app)");
     }
   }, [user, loading, segments]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    reconcileColdTrips().catch((e) => console.error("[ColdTrip]", e)); // cold start
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        reconcileColdTrips().catch((e) => console.error("[ColdTrip]", e));
+      }
+    });
+    return () => sub.remove();
+  }, [user, loading]);
 
   if (loading) {
     return (
@@ -68,7 +81,7 @@ const styles = StyleSheet.create({
   loading: {
     flex: 1,
     backgroundColor: theme.colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
