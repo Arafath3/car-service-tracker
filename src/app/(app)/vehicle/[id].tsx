@@ -331,7 +331,8 @@ export default function VehicleDetailScreen() {
                   <Text style={styles.historyType}>{s.serviceType}</Text>
                   <Text style={styles.historyDate}>
                     {new Date(s.date).toLocaleDateString()} ·{" "}
-                    {s.odometer.toLocaleString()} km
+                    {formatDistance(s.odometer, system)}{" "}
+                    {distanceUnitShort(system)}
                   </Text>
                   {s.notes ? (
                     <Text style={styles.historyNotes}>{s.notes}</Text>

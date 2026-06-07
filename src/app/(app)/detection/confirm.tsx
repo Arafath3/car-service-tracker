@@ -44,6 +44,7 @@ import {
   formatDistance,
   distanceUnitLong,
   distanceUnitShort,
+  speedUnitShort,
 } from "@/lib/units";
 type Step = "verify" | "distance" | "vehicle" | "saving";
 
@@ -100,7 +101,6 @@ export default function ConfirmTripScreen() {
       }
       setTrip(t);
       setEditedDistance(fromKm(t.distanceKm, system).toFixed(2));
-      setEditedDistance(t.distanceKm.toFixed(2));
       setSelectedVehicleId(t.vehicleId);
 
       const [vehicleError, vs] = await safeAwait(getVehicles());
@@ -301,7 +301,7 @@ export default function ConfirmTripScreen() {
     setBusy(false);
     setAlertConfig({
       title: "✓ Trip Saved",
-      message: `$${formatDistance(distance, system)} ${distanceUnitShort(system)} added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${formatDistance(newOdometer, system)} ${distanceUnitShort(system)}`,
+      message: `${formatDistance(distance, system)} ${distanceUnitShort(system)} added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${formatDistance(newOdometer, system)} ${distanceUnitShort(system)}`,
       buttons: [{ text: "OK", style: "default", onPress: () => router.back() }],
     });
   };
@@ -367,7 +367,8 @@ export default function ConfirmTripScreen() {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Distance</Text>
                 <Text style={styles.summaryValue}>
-                  {trip.distanceKm.toFixed(2)} km
+                  {formatDistance(trip.distanceKm, system)}{" "}
+                  {distanceUnitShort(system)}
                 </Text>
               </View>
               <View style={styles.summaryDivider} />
@@ -399,14 +400,16 @@ export default function ConfirmTripScreen() {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Average Speed</Text>
                 <Text style={styles.summaryValue}>
-                  {trip.averageSpeedKmh.toFixed(1)} km/h
+                  {formatDistance(trip.averageSpeedKmh, system)}{" "}
+                  {speedUnitShort(system)}
                 </Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Max Speed</Text>
                 <Text style={styles.summaryValue}>
-                  {trip.maxSpeedKmh.toFixed(1)} km/h
+                  {formatDistance(trip.maxSpeedKmh, system)}{" "}
+                  {speedUnitShort(system)}
                 </Text>
               </View>
             </View>
@@ -494,7 +497,8 @@ export default function ConfirmTripScreen() {
                 <View style={styles.editCard}>
                   <Text style={styles.editCardLabel}>Original estimate</Text>
                   <Text style={styles.editCardValue}>
-                    {trip.distanceKm.toFixed(2)} km
+                    {formatDistance(trip.distanceKm, system)}{" "}
+                    {distanceUnitShort(system)}
                   </Text>
                 </View>
 
@@ -520,7 +524,9 @@ export default function ConfirmTripScreen() {
                 <Button
                   title="Cancel Edit"
                   onPress={() => {
-                    setEditedDistance(trip.distanceKm.toFixed(2));
+                    setEditedDistance(
+                      fromKm(trip.distanceKm, system).toFixed(2),
+                    );
                     setEditingDistance(false);
                   }}
                   variant="ghost"
@@ -556,7 +562,10 @@ export default function ConfirmTripScreen() {
             {allVehicles.map((v) => {
               const isSelected = selectedVehicleId === v.id;
               const isOriginal = v.id === trip.vehicleId;
-              const newOdo = v.currentOdometer + parseFloat(editedDistance);
+              const newOdo = toKm(
+                v.currentOdometer + parseFloat(editedDistance),
+                system,
+              );
               return (
                 <TouchableOpacity
                   key={v.id}

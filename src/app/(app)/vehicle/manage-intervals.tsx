@@ -73,7 +73,7 @@ export default function ManageIntervalsScreen() {
       setError("Enter a service name");
       return;
     }
-    const km = fromKm(parseFloat(newKm), system);
+    const km = toKm(parseFloat(newKm), system);
     if (isNaN(km) || km <= 0) {
       setError(`Enter a valid interval in ${distanceUnitShort(system)}`);
       return;

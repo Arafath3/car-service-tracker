@@ -41,7 +41,7 @@ export default function EditOdometerScreen() {
       const v = all.find((x) => x.id === vehicleId);
       if (v) {
         setVehicle(v);
-        setNewOdometer(String(v.currentOdometer));
+        setNewOdometer(String(fromKm(v.currentOdometer, system)));
       }
     })();
   }, [vehicleId]);
@@ -51,13 +51,14 @@ export default function EditOdometerScreen() {
     if (!vehicle) return;
 
     const odoNum = parseFloat(newOdometer);
+    const odoKm = toKm(odoNum, system);
     if (isNaN(odoNum) || odoNum < 0) {
       setError("Enter a valid odometer reading");
       return;
     }
 
     // Warn if reducing the odometer (cars don't go backwards!)
-    if (odoNum < vehicle.currentOdometer) {
+    if (odoKm < vehicle.currentOdometer) {
       setAlertConfig({
         title: "Decrease odometer?",
         message: `You're reducing the odometer from ${formatDistance(vehicle.currentOdometer, system)} ${distanceUnitShort(system)} to ${formatDistance(odoNum, system)} ${distanceUnitShort(system)}. Vehicle odometers don't normally go down. Continue?`,
@@ -75,7 +76,7 @@ export default function EditOdometerScreen() {
     }
 
     // Warn if huge jump (more than 10,000 km in one edit)
-    const diff = odoNum - vehicle.currentOdometer;
+    const diff = odoKm - vehicle.currentOdometer;
     if (diff > 10000) {
       setAlertConfig({
         title: "Large increase",
@@ -110,8 +111,8 @@ export default function EditOdometerScreen() {
     );
   }
 
-  const newValue = parseFloat(newOdometer) || 0;
-  const diff = newValue - vehicle.currentOdometer;
+  const newValueKm = toKm(parseFloat(newOdometer) || 0, system);
+  const diff = newValueKm - vehicle.currentOdometer; // km
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -155,7 +156,7 @@ export default function EditOdometerScreen() {
 
           <Input
             label={`New Odometer Reading (${distanceUnitShort(system)})`}
-            value={formatDistance(parseFloat(newOdometer), system)}
+            value={newOdometer}
             onChangeText={setNewOdometer}
             keyboardType="numeric"
             placeholder="e.g. 52000"

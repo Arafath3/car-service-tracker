@@ -56,6 +56,7 @@ export default function AppLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="vehicle/add" options={{ presentation: "modal" }} />
         <Stack.Screen name="vehicle/[id]" />
+        <Stack.Screen name="settings" />
         <Stack.Screen
           name="vehicle/edit-odometer"
           options={{ presentation: "modal" }}

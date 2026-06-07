@@ -41,6 +41,7 @@ import {
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
+import { distanceUnitShort, formatDistance } from "@/lib/units";
 
 const STATE_COLORS: Record<DetectionState, string> = {
   idle: theme.colors.textMuted,
@@ -71,7 +72,7 @@ const STATE_DESCRIPTIONS: Record<DetectionState, string> = {
   validating: "Validation window — confirming end of trip.",
   awaiting_confirmation: "Trip ready for review. Check notifications.",
 };
-
+import { useUnits } from "@/context/UnitContext";
 export default function PassiveDetectionScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -96,7 +97,7 @@ export default function PassiveDetectionScreen() {
     message?: string;
     buttons?: AlertButton[];
   } | null>(null);
-
+  const { system } = useUnits();
   const loadData = useCallback(async () => {
     if (!user) return;
     reconcileColdTrips().catch((e) =>
@@ -423,8 +424,11 @@ export default function PassiveDetectionScreen() {
             <View style={styles.statBox}>
               <Text style={styles.statSubLabel}>TRIP DISTANCE</Text>
               <Text style={styles.statSubValue}>
-                {accumulatedKm.toFixed(2)}
-                <Text style={styles.statSubUnit}> km</Text>
+                {formatDistance(accumulatedKm, system)}
+                <Text style={styles.statSubUnit}>
+                  {" "}
+                  {distanceUnitShort(system)}
+                </Text>
               </Text>
             </View>
           </View>
