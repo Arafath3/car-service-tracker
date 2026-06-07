@@ -30,6 +30,7 @@ import {
   updateVehicle,
   saveDetectionContext,
   getDetectionContext,
+  incrementOdometer,
 } from "@/lib/storage";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/Input";
@@ -278,10 +279,7 @@ export default function ConfirmTripScreen() {
 
     // 1. Critical writes — the trip and the odometer must both land.
     const [saveError] = await safeAwait(
-      Promise.all([
-        addTrip(newTrip),
-        updateVehicle({ ...vehicle, currentOdometer: newOdometer }),
-      ]),
+      Promise.all([addTrip(newTrip), incrementOdometer(vehicleId, distance)]),
     );
 
     if (saveError) {

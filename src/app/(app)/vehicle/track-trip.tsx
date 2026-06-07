@@ -12,7 +12,7 @@ import * as Location from "expo-location";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 import type { Vehicle, Trip } from "@/types";
-import { getVehicles, updateVehicle, addTrip } from "@/lib/storage";
+import { getVehicles, addTrip, incrementOdometer } from "@/lib/storage";
 import { haversineKm } from "@/lib/detectionEngine";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
@@ -21,7 +21,6 @@ import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 import { useUnits } from "@/context/UnitContext";
 import {
   fromKm,
-  toKm,
   formatDistance,
   distanceUnitLong,
   speedUnitShort,
@@ -156,7 +155,7 @@ export default function TrackTripScreen() {
     const [saveErr] = await safeAwait(
       Promise.all([
         addTrip(trip),
-        updateVehicle({ ...vehicle, currentOdometer: newOdometer }),
+        incrementOdometer(vehicle.id, finalDistance),
       ]),
     );
     if (saveErr) {

@@ -14,6 +14,8 @@ import {
   writeBatch,
   increment,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
 } from "@react-native-firebase/firestore";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
@@ -53,13 +55,52 @@ const getUid = (): string => {
 // ---------- VEHICLES (HYBRID) ----------
 export const getVehicles = async (): Promise<Vehicle[]> => {
   if (isCloudUser()) {
+    const uid = getUid();
     const snap = await getDocs(
-      query(collection(db, "vehicles"), where("userId", "==", getUid())),
+      query(
+        collection(db, "vehicles"),
+        where("memberIds", "array-contains", uid),
+      ),
     );
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle);
+    const shared = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle);
+
+    // Back-compat: older docs created before sharing have userId but no memberIds.
+    const legacy = await getDocs(
+      query(collection(db, "vehicles"), where("userId", "==", uid)),
+    );
+    const merged = new Map<string, Vehicle>();
+    [
+      ...shared,
+      ...legacy.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle),
+    ].forEach((v) => merged.set(v.id!, v));
+    return [...merged.values()];
   }
   const raw = await AsyncStorage.getItem(KEYS.VEHICLES);
   return raw ? JSON.parse(raw) : [];
+};
+
+// Atomically add distance to the odometer. Safe under concurrent writes from
+// multiple members — never use read-modify-write for accumulation.
+export const incrementOdometer = async (
+  vehicleId: string,
+  deltaKm: number,
+): Promise<void> => {
+  if (isCloudUser()) {
+    await updateDoc(doc(db, "vehicles", vehicleId), {
+      currentOdometer: increment(deltaKm),
+    });
+    return;
+  }
+  // Local/guest: plain read-modify-write is fine (single device).
+  const all = await getVehicles();
+  const idx = all.findIndex((v) => v.id === vehicleId);
+  if (idx >= 0) {
+    all[idx] = {
+      ...all[idx],
+      currentOdometer: (all[idx].currentOdometer ?? 0) + deltaKm,
+    };
+    await AsyncStorage.setItem(KEYS.VEHICLES, JSON.stringify(all));
+  }
 };
 
 export const getVehiclesForUser = async (
@@ -81,9 +122,10 @@ export const addVehicle = async (
   const id = vehicle.id ?? uuidv4();
   if (isCloudUser()) {
     const { id: _i, userId: _u, ...data } = vehicle;
+    const uid = getUid();
     await setDoc(
       doc(db, "vehicles", id),
-      stripUndefined({ ...data, userId: getUid() }),
+      stripUndefined({ ...data, userId: uid, ownerId: uid, memberIds: [uid] }),
     );
     return id;
   }
@@ -491,4 +533,61 @@ export const getUnitSystem = async (): Promise<UnitSystem> => {
 
 export const setUnitSystem = async (system: UnitSystem): Promise<void> => {
   await AsyncStorage.setItem("unitSystem", system);
+};
+
+// --- shared vehicle ----
+
+const INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 ambiguity
+const makeInviteCode = (len = 6) =>
+  Array.from(
+    { length: len },
+    () => INVITE_CHARS[Math.floor(Math.random() * INVITE_CHARS.length)],
+  ).join("");
+
+// Owner creates an invite code pointing at one of their vehicles.
+export const createInviteCode = async (vehicleId: string): Promise<string> => {
+  if (!isCloudUser()) throw new Error("Sign in to share a vehicle.");
+  const uid = getUid();
+  // a few retries in case of code collision (vanishingly rare at this scale)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = makeInviteCode();
+    const ref = doc(db, "invites", code);
+    const existing = await getDoc(ref);
+    if (existing.exists()) continue;
+    await setDoc(ref, {
+      vehicleId,
+      ownerId: uid,
+      createdAt: serverTimestamp(),
+    });
+    return code;
+  }
+  throw new Error("Could not generate a code. Try again.");
+};
+
+// Joiner redeems a code: adds themselves to the vehicle's memberIds.
+export const redeemInviteCode = async (rawCode: string): Promise<Vehicle> => {
+  if (!isCloudUser()) throw new Error("Sign in to join a shared vehicle.");
+  const uid = getUid();
+  const code = rawCode.trim().toUpperCase();
+  if (!code) throw new Error("Enter a code.");
+
+  const inviteSnap = await getDoc(doc(db, "invites", code));
+  if (!inviteSnap.exists()) throw new Error("That code isn't valid.");
+  const { vehicleId } = inviteSnap.data() as { vehicleId: string };
+
+  const vehicleRef = doc(db, "vehicles", vehicleId);
+  // arrayUnion is idempotent — rejoining is a no-op, not a duplicate.
+  await updateDoc(vehicleRef, { memberIds: arrayUnion(uid) });
+
+  const vSnap = await getDoc(vehicleRef);
+  return { id: vSnap.id, ...vSnap.data() } as Vehicle;
+};
+
+// Anyone can leave; removes only their own UID. No one can remove anyone else.
+export const leaveSharedVehicle = async (vehicleId: string): Promise<void> => {
+  if (!isCloudUser()) throw new Error("Not a shared vehicle.");
+  const uid = getUid();
+  await updateDoc(doc(db, "vehicles", vehicleId), {
+    memberIds: arrayRemove(uid),
+  });
 };
