@@ -82,6 +82,10 @@ export default function AppLayout() {
           name="vehicle/manage-intervals"
           options={{ presentation: "modal" }}
         />
+        <Stack.Screen
+          name="vehicle/share"
+          options={{ presentation: "modal" }}
+        />
       </Stack>
     </BluetoothProvider>
   );

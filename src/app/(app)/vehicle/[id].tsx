@@ -311,6 +311,19 @@ export default function VehicleDetailScreen() {
             size="lg"
             style={{ marginTop: theme.spacing.sm }}
           />
+          <Button
+            title="👥 Share Vehicle"
+            onPress={() =>
+              router.push({
+                pathname: "/(app)/vehicle/share",
+                params: { id: vehicle.id },
+              })
+            }
+            variant="ghost"
+            fullWidth
+            size="lg"
+            style={{ marginTop: theme.spacing.sm }}
+          />
         </View>
 
         <Text style={styles.sectionTitle}>SCHEDULED SERVICES</Text>

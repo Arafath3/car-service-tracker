@@ -548,6 +548,15 @@ const makeInviteCode = (len = 6) =>
 export const createInviteCode = async (vehicleId: string): Promise<string> => {
   if (!isCloudUser()) throw new Error("Sign in to share a vehicle.");
   const uid = getUid();
+  const vRef = doc(db, "vehicles", vehicleId);
+  const vSnap = await getDoc(vRef);
+  const data = vSnap.data() as Vehicle | undefined;
+  if (data && !data.memberIds) {
+    await updateDoc(vRef, {
+      ownerId: data.ownerId ?? uid,
+      memberIds: [uid],
+    });
+  }
   // a few retries in case of code collision (vanishingly rare at this scale)
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = makeInviteCode();
