@@ -1,8 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import type { Vehicle } from '@/types';
-import type { ServiceStatus } from '@/lib/serviceIntervals';
-import { theme } from '@/theme';
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import type { Vehicle } from "@/types";
+import type { ServiceStatus } from "@/lib/serviceIntervals";
+import { theme } from "@/theme";
+import { useUnits } from "@/context/UnitContext";
+import {
+  fromKm,
+  toKm,
+  formatDistance,
+  distanceUnitLong,
+  speedUnitShort,
+  distanceUnitShort,
+} from "@/lib/units";
 
 // ---------- VehicleCard ----------
 interface VehicleCardProps {
@@ -11,13 +20,27 @@ interface VehicleCardProps {
   onPress: () => void;
 }
 
-export const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, servicesDue, onPress }) => {
-  const isCar = vehicle.type === 'car';
+export const VehicleCard: React.FC<VehicleCardProps> = ({
+  vehicle,
+  servicesDue,
+  onPress,
+}) => {
+  const isCar = vehicle.type === "car";
+  const { system } = useUnits();
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.vehicleCard}>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={styles.vehicleCard}
+    >
       <View style={styles.vehicleHeader}>
-        <View style={[styles.vehicleIconBox, { backgroundColor: theme.colors.accentSoft }]}>
-          <Text style={styles.vehicleIconText}>{isCar ? '🚗' : '🏍️'}</Text>
+        <View
+          style={[
+            styles.vehicleIconBox,
+            { backgroundColor: theme.colors.accentSoft },
+          ]}
+        >
+          <Text style={styles.vehicleIconText}>{isCar ? "🚗" : "🏍️"}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.vehicleNickname}>
@@ -38,12 +61,13 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, servicesDue, 
         <View style={{ flex: 1 }}>
           <Text style={styles.statLabel}>ODOMETER</Text>
           <Text style={styles.statValue}>
-            {vehicle.currentOdometer.toLocaleString()} <Text style={styles.unit}>km</Text>
+            {formatDistance(vehicle.currentOdometer, system)}{" "}
+            <Text style={styles.unit}>{distanceUnitShort(system)}</Text>
           </Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.statLabel}>TYPE</Text>
-          <Text style={styles.statValue}>{isCar ? 'Car' : 'Motorbike'}</Text>
+          <Text style={styles.statValue}>{isCar ? "Car" : "Motorbike"}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -56,20 +80,41 @@ interface ServiceStatusCardProps {
 }
 
 const statusInfo = {
-  overdue: { color: theme.colors.danger, soft: theme.colors.dangerSoft, label: 'OVERDUE' },
-  'due-soon': { color: theme.colors.warning, soft: theme.colors.warningSoft, label: 'DUE SOON' },
-  ok: { color: theme.colors.success, soft: theme.colors.successSoft, label: 'OK' },
-  'never-done': { color: theme.colors.info, soft: theme.colors.infoSoft, label: 'NOT LOGGED' },
+  overdue: {
+    color: theme.colors.danger,
+    soft: theme.colors.dangerSoft,
+    label: "OVERDUE",
+  },
+  "due-soon": {
+    color: theme.colors.warning,
+    soft: theme.colors.warningSoft,
+    label: "DUE SOON",
+  },
+  ok: {
+    color: theme.colors.success,
+    soft: theme.colors.successSoft,
+    label: "OK",
+  },
+  "never-done": {
+    color: theme.colors.info,
+    soft: theme.colors.infoSoft,
+    label: "NOT LOGGED",
+  },
 };
 
-export const ServiceStatusCard: React.FC<ServiceStatusCardProps> = ({ status }) => {
+export const ServiceStatusCard: React.FC<ServiceStatusCardProps> = ({
+  status,
+}) => {
   const info = statusInfo[status.status];
+  const { system } = useUnits();
   return (
     <View style={styles.serviceCard}>
       <View style={styles.serviceHeader}>
         <Text style={styles.serviceType}>{status.serviceType}</Text>
         <View style={[styles.serviceBadge, { backgroundColor: info.soft }]}>
-          <Text style={[styles.serviceBadgeText, { color: info.color }]}>{info.label}</Text>
+          <Text style={[styles.serviceBadgeText, { color: info.color }]}>
+            {info.label}
+          </Text>
         </View>
       </View>
       <Text style={styles.serviceDesc}>{status.description}</Text>
@@ -77,20 +122,28 @@ export const ServiceStatusCard: React.FC<ServiceStatusCardProps> = ({ status }) 
         <View
           style={[
             styles.progressFill,
-            { width: `${status.progressPercent}%`, backgroundColor: info.color },
+            {
+              width: `${status.progressPercent}%`,
+              backgroundColor: info.color,
+            },
           ]}
         />
       </View>
       <View style={styles.serviceDetails}>
         <Text style={styles.serviceDetail}>
           {status.lastDoneAt !== null
-            ? `Last: ${status.lastDoneAt.toLocaleString()} km`
-            : 'Never logged'}
+            ? `Last: ${formatDistance(status.lastDoneAt, system)} ${distanceUnitShort(system)}`
+            : "Never logged"}
         </Text>
-        <Text style={[styles.serviceDetail, { color: info.color, fontWeight: theme.fontWeight.semibold }]}>
+        <Text
+          style={[
+            styles.serviceDetail,
+            { color: info.color, fontWeight: theme.fontWeight.semibold },
+          ]}
+        >
           {status.kmRemaining > 0
-            ? `${status.kmRemaining.toLocaleString()} km left`
-            : `${Math.abs(status.kmRemaining).toLocaleString()} km overdue`}
+            ? `${formatDistance(status.kmRemaining, system)} ${distanceUnitShort(system)} left`
+            : `${formatDistance(Math.abs(status.kmRemaining), system)} ${distanceUnitShort(system)} overdue`}
         </Text>
       </View>
     </View>
@@ -105,9 +158,19 @@ interface StatTileProps {
   accent?: string;
 }
 
-export const StatTile: React.FC<StatTileProps> = ({ label, value, unit, accent }) => {
+export const StatTile: React.FC<StatTileProps> = ({
+  label,
+  value,
+  unit,
+  accent,
+}) => {
   return (
-    <View style={[styles.statTile, accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : null]}>
+    <View
+      style={[
+        styles.statTile,
+        accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : null,
+      ]}
+    >
       <Text style={styles.statTileLabel}>{label}</Text>
       <View style={styles.statTileValueRow}>
         <Text style={styles.statTileValue}>{value}</Text>
@@ -127,10 +190,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  vehicleHeader: { flexDirection: 'row', alignItems: 'center' },
+  vehicleHeader: { flexDirection: "row", alignItems: "center" },
   vehicleIconBox: {
-    width: 52, height: 52, borderRadius: theme.radius.md,
-    alignItems: 'center', justifyContent: 'center',
+    width: 52,
+    height: 52,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: theme.spacing.md,
   },
   vehicleIconText: { fontSize: 26 },
@@ -146,12 +212,15 @@ const styles = StyleSheet.create({
   },
   vehicleBadge: {
     backgroundColor: theme.colors.warning,
-    minWidth: 26, height: 26, borderRadius: 13,
-    alignItems: 'center', justifyContent: 'center',
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 6,
   },
   vehicleBadgeText: {
-    color: '#000',
+    color: "#000",
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.bold,
   },
@@ -160,7 +229,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.borderLight,
     marginVertical: theme.spacing.md,
   },
-  vehicleFooter: { flexDirection: 'row' },
+  vehicleFooter: { flexDirection: "row" },
   statLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.xs,
@@ -189,8 +258,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   serviceHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
   },
   serviceType: {
     color: theme.colors.textPrimary,
@@ -199,7 +270,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   serviceBadge: {
-    paddingHorizontal: 8, paddingVertical: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: theme.radius.sm,
   },
   serviceBadgeText: {
@@ -215,12 +287,14 @@ const styles = StyleSheet.create({
   progressBg: {
     height: 6,
     backgroundColor: theme.colors.bgInput,
-    borderRadius: 3, overflow: 'hidden',
+    borderRadius: 3,
+    overflow: "hidden",
     marginBottom: theme.spacing.sm,
   },
-  progressFill: { height: '100%', borderRadius: 3 },
+  progressFill: { height: "100%", borderRadius: 3 },
   serviceDetails: {
-    flexDirection: 'row', justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   serviceDetail: {
     color: theme.colors.textSecondary,
@@ -242,9 +316,9 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
     letterSpacing: 1,
     marginBottom: theme.spacing.xs,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
-  statTileValueRow: { flexDirection: 'row', alignItems: 'baseline' },
+  statTileValueRow: { flexDirection: "row", alignItems: "baseline" },
   statTileValue: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.xxl,

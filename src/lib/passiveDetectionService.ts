@@ -2,6 +2,7 @@
 // PASSIVE DETECTION BACKGROUND SERVICE
 // ============================================================================
 import BluetoothDetection from "@/../modules/bluetooth-detection/src/BluetoothDetectionModule";
+import { AppState } from "react-native";
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
@@ -549,7 +550,9 @@ const reconcileOneTripFile = async (name: string): Promise<void> => {
     };
 
     await addPendingTrip(pendingTrip);
-    await sendTripConfirmationNotification(pendingTrip);
+    if (AppState.currentState !== "active") {
+      await sendTripConfirmationNotification(pendingTrip);
+    }
 
     // Delete ONLY after the trip is safely persisted. If anything above
     // throws, the file stays and the next reconcile retries it.

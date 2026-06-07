@@ -16,6 +16,8 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
+import { useUnits } from "@/context/UnitContext";
+import { fromKm, toKm, formatDistance, distanceUnitShort } from "@/lib/units";
 
 export default function EditOdometerScreen() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export default function EditOdometerScreen() {
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const { system } = useUnits();
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
     message?: string;
@@ -57,7 +60,7 @@ export default function EditOdometerScreen() {
     if (odoNum < vehicle.currentOdometer) {
       setAlertConfig({
         title: "Decrease odometer?",
-        message: `You're reducing the odometer from ${vehicle.currentOdometer.toLocaleString()} km to ${odoNum.toLocaleString()} km. Vehicle odometers don't normally go down. Continue?`,
+        message: `You're reducing the odometer from ${formatDistance(vehicle.currentOdometer, system)} ${distanceUnitShort(system)} to ${formatDistance(odoNum, system)} ${distanceUnitShort(system)}. Vehicle odometers don't normally go down. Continue?`,
         buttons: [
           { text: "Cancel", style: "cancel" },
           {
@@ -76,7 +79,7 @@ export default function EditOdometerScreen() {
     if (diff > 10000) {
       setAlertConfig({
         title: "Large increase",
-        message: `You're adding ${diff.toLocaleString()} km in one edit. This seems large. Are you sure?`,
+        message: `You're adding ${formatDistance(diff, system)} ${distanceUnitShort(system)} in one edit. This seems large. Are you sure?`,
         buttons: [
           { text: "Cancel", style: "cancel" },
           { text: "Yes, save", style: "default", onPress: () => save(odoNum) },
@@ -91,7 +94,8 @@ export default function EditOdometerScreen() {
   const save = async (odoNum: number) => {
     if (!vehicle) return;
     setSaving(true);
-    await updateVehicle({ ...vehicle, currentOdometer: odoNum });
+    const odometerKm = toKm(odoNum, system);
+    await updateVehicle({ ...vehicle, currentOdometer: odometerKm });
     setSaving(false);
     router.back();
   };
@@ -142,16 +146,16 @@ export default function EditOdometerScreen() {
           <View style={styles.currentCard}>
             <Text style={styles.currentLabel}>Current value</Text>
             <Text style={styles.currentValue}>
-              {vehicle.currentOdometer.toLocaleString(undefined, {
-                maximumFractionDigits: 1,
-              })}{" "}
-              <Text style={styles.currentUnit}>km</Text>
+              {formatDistance(vehicle.currentOdometer, system)}{" "}
+              <Text style={styles.currentUnit}>
+                {distanceUnitShort(system)}
+              </Text>
             </Text>
           </View>
 
           <Input
-            label="New Odometer Reading (km)"
-            value={newOdometer}
+            label={`New Odometer Reading (${distanceUnitShort(system)})`}
+            value={formatDistance(parseFloat(newOdometer), system)}
             onChangeText={setNewOdometer}
             keyboardType="numeric"
             placeholder="e.g. 52000"
@@ -192,11 +196,7 @@ export default function EditOdometerScreen() {
                   },
                 ]}
               >
-                {diff > 0 ? "+" : ""}
-                {diff.toLocaleString(undefined, {
-                  maximumFractionDigits: 1,
-                })}{" "}
-                km
+                {`${diff > 0 ? "+" : ""}${formatDistance(Math.abs(diff), system)} ${distanceUnitShort(system)}`}
               </Text>
             </View>
           )}

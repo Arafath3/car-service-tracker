@@ -2,7 +2,12 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { ServiceStatus } from "../lib/serviceIntervals";
 import { theme } from "../theme";
-
+import { useUnits } from "@/context/UnitContext";
+import {
+  formatDistance,
+  distanceUnitLong,
+  distanceUnitShort,
+} from "@/lib/units";
 interface Props {
   status: ServiceStatus;
 }
@@ -32,6 +37,7 @@ const statusInfo = {
 
 export const ServiceStatusCard: React.FC<Props> = ({ status }) => {
   const info = statusInfo[status.status];
+  const { system } = useUnits();
 
   return (
     <View style={styles.card}>
@@ -99,7 +105,7 @@ export const ServiceStatusCard: React.FC<Props> = ({ status }) => {
       <View style={styles.detailsRow}>
         <Text style={styles.detail}>
           {status.lastDoneAt !== null
-            ? `Last: ${status.lastDoneAt.toLocaleString()} km`
+            ? `Last: ${formatDistance(status.lastDoneAt, system)}  ${distanceUnitLong(system)}`
             : "Never logged"}
         </Text>
         <Text
@@ -109,8 +115,8 @@ export const ServiceStatusCard: React.FC<Props> = ({ status }) => {
           ]}
         >
           {status.kmRemaining > 0
-            ? `${status.kmRemaining.toLocaleString()} km left`
-            : `${Math.abs(status.kmRemaining).toLocaleString()} km overdue`}
+            ? `${formatDistance(status.kmRemaining, system)} ${distanceUnitLong(system)} left`
+            : `${formatDistance(Math.abs(status.kmRemaining), system)} ${distanceUnitLong(system)} overdue`}
         </Text>
       </View>
     </View>

@@ -1,7 +1,16 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Vehicle } from '../types';
-import { theme } from '../theme';
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { Vehicle } from "../types";
+import { theme } from "../theme";
+import { useUnits } from "@/context/UnitContext";
+import {
+  fromKm,
+  toKm,
+  formatDistance,
+  distanceUnitLong,
+  speedUnitShort,
+  distanceUnitShort,
+} from "@/lib/units";
 
 interface Props {
   vehicle: Vehicle;
@@ -9,16 +18,29 @@ interface Props {
   onPress: () => void;
 }
 
-export const VehicleCard: React.FC<Props> = ({ vehicle, servicesDue, onPress }) => {
-  const isCar = vehicle.type === 'car';
+export const VehicleCard: React.FC<Props> = ({
+  vehicle,
+  servicesDue,
+  onPress,
+}) => {
+  const isCar = vehicle.type === "car";
+  const { system } = useUnits();
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.card}>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={styles.card}
+    >
       <View style={styles.header}>
-        <View style={[styles.iconBox, { backgroundColor: theme.colors.accentSoft }]}>
-          <Text style={styles.iconText}>{isCar ? '🚗' : '🏍️'}</Text>
+        <View
+          style={[styles.iconBox, { backgroundColor: theme.colors.accentSoft }]}
+        >
+          <Text style={styles.iconText}>{isCar ? "🚗" : "🏍️"}</Text>
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.nickname}>{vehicle.nickname || `${vehicle.make} ${vehicle.model}`}</Text>
+          <Text style={styles.nickname}>
+            {vehicle.nickname || `${vehicle.make} ${vehicle.model}`}
+          </Text>
           <Text style={styles.makeModel}>
             {vehicle.year} · {vehicle.make} {vehicle.model}
           </Text>
@@ -35,11 +57,14 @@ export const VehicleCard: React.FC<Props> = ({ vehicle, servicesDue, onPress }) 
       <View style={styles.footer}>
         <View style={styles.stat}>
           <Text style={styles.statLabel}>ODOMETER</Text>
-          <Text style={styles.statValue}>{vehicle.currentOdometer.toLocaleString()} <Text style={styles.unit}>km</Text></Text>
+          <Text style={styles.statValue}>
+            {formatDistance(vehicle.currentOdometer, system)}{" "}
+            <Text style={styles.unit}>{distanceUnitShort(system)}</Text>
+          </Text>
         </View>
         <View style={styles.stat}>
           <Text style={styles.statLabel}>TYPE</Text>
-          <Text style={styles.statValue}>{isCar ? 'Car' : 'Motorbike'}</Text>
+          <Text style={styles.statValue}>{isCar ? "Car" : "Motorbike"}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -56,15 +81,15 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   iconBox: {
     width: 52,
     height: 52,
     borderRadius: theme.radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: theme.spacing.md,
   },
   iconText: { fontSize: 26 },
@@ -84,12 +109,12 @@ const styles = StyleSheet.create({
     minWidth: 26,
     height: 26,
     borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 6,
   },
   badgeText: {
-    color: '#000',
+    color: "#000",
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.bold,
   },
@@ -99,8 +124,8 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.md,
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   stat: {
     flex: 1,

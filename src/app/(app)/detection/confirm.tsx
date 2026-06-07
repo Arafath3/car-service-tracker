@@ -37,7 +37,14 @@ import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
-
+import { useUnits } from "@/context/UnitContext";
+import {
+  fromKm,
+  toKm,
+  formatDistance,
+  distanceUnitLong,
+  distanceUnitShort,
+} from "@/lib/units";
 type Step = "verify" | "distance" | "vehicle" | "saving";
 
 export default function ConfirmTripScreen() {
@@ -49,7 +56,7 @@ export default function ConfirmTripScreen() {
   const [step, setStep] = useState<Step>("verify");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-
+  const { system } = useUnits();
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
     message?: string;
@@ -91,8 +98,8 @@ export default function ConfirmTripScreen() {
 
         return;
       }
-
       setTrip(t);
+      setEditedDistance(fromKm(t.distanceKm, system).toFixed(2));
       setEditedDistance(t.distanceKm.toFixed(2));
       setSelectedVehicleId(t.vehicleId);
 
@@ -178,10 +185,12 @@ export default function ConfirmTripScreen() {
     if (allVehicles.length > 1) {
       setStep("vehicle");
     } else {
-      saveTripFinal(
-        parseFloat(editedDistance) || trip!.distanceKm,
-        selectedVehicleId!,
-      );
+      // where you currently call saveTripFinal:
+      const typedInDisplayUnits = parseFloat(editedDistance);
+      const distanceKmToStore = Number.isFinite(typedInDisplayUnits)
+        ? toKm(typedInDisplayUnits, system)
+        : trip!.distanceKm;
+      saveTripFinal(distanceKmToStore, selectedVehicleId);
     }
   };
 
@@ -232,10 +241,12 @@ export default function ConfirmTripScreen() {
 
       return;
     }
-    saveTripFinal(
-      parseFloat(editedDistance) || trip!.distanceKm,
-      selectedVehicleId,
-    );
+    // where you currently call saveTripFinal:
+    const typedInDisplayUnits = parseFloat(editedDistance);
+    const distanceKmToStore = Number.isFinite(typedInDisplayUnits)
+      ? toKm(typedInDisplayUnits, system)
+      : trip!.distanceKm;
+    saveTripFinal(distanceKmToStore, selectedVehicleId);
   };
 
   // ---------- FINAL SAVE ----------
@@ -290,7 +301,7 @@ export default function ConfirmTripScreen() {
     setBusy(false);
     setAlertConfig({
       title: "✓ Trip Saved",
-      message: `${distance.toFixed(2)} km added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
+      message: `$${formatDistance(distance, system)} ${distanceUnitShort(system)} added to ${vehicle.nickname || vehicle.make + " " + vehicle.model}.\n\nNew odometer: ${formatDistance(newOdometer, system)} ${distanceUnitShort(system)}`,
       buttons: [{ text: "OK", style: "default", onPress: () => router.back() }],
     });
   };
@@ -442,9 +453,11 @@ export default function ConfirmTripScreen() {
                     ESTIMATED DISTANCE
                   </Text>
                   <Text style={styles.distanceBigValue}>
-                    {parseFloat(editedDistance).toFixed(2)}
+                    {formatDistance(trip.distanceKm, system)}
                   </Text>
-                  <Text style={styles.distanceBigUnit}>kilometers</Text>
+                  <Text style={styles.distanceBigUnit}>
+                    {distanceUnitLong(system)}
+                  </Text>
                 </View>
 
                 <Text style={styles.helperText}>
@@ -533,7 +546,8 @@ export default function ConfirmTripScreen() {
             <View style={styles.distanceSmallCard}>
               <Text style={styles.distanceSmallLabel}>Distance to add:</Text>
               <Text style={styles.distanceSmallValue}>
-                {parseFloat(editedDistance).toFixed(2)} km
+                {(parseFloat(editedDistance) || 0).toFixed(2)}{" "}
+                {distanceUnitShort(system)}
               </Text>
             </View>
 

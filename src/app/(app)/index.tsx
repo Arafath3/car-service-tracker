@@ -23,6 +23,7 @@ import { VehicleCard } from "@/components";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
+import type { PendingTrip } from "@/types";
 
 interface VehicleWithDue {
   vehicle: Vehicle;
@@ -36,6 +37,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [detectionActive, setDetectionActive] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [pending, setPending] = useState<PendingTrip[]>([]);
 
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
@@ -70,6 +72,14 @@ export default function HomeScreen() {
     }, [loadData]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      getAwaitingConfirmation()
+        .then(setPending)
+        .catch(() => setPending([]));
+    }, []),
+  );
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
@@ -98,6 +108,12 @@ export default function HomeScreen() {
             {user?.isGuest ? "Data saved on this device" : user?.username}
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={() => router.push("/(app)/settings")}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={{ fontSize: 22 }}>⚙️</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>↗</Text>
         </TouchableOpacity>
@@ -113,6 +129,31 @@ export default function HomeScreen() {
           />
         }
       >
+        {pending.length > 0 && (
+          <TouchableOpacity
+            style={styles.pendingBanner}
+            activeOpacity={0.85}
+            onPress={() =>
+              router.push({
+                pathname: "/(app)/detection/confirm",
+                params: { id: pending[0].id },
+              })
+            }
+          >
+            <View style={styles.pendingDot} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pendingTitle}>
+                {pending.length} trip{pending.length > 1 ? "s" : ""} awaiting
+                confirmation
+              </Text>
+              <Text style={styles.pendingSubtitle}>
+                {pending.length === 1
+                  ? `${pending[0].distanceKm.toFixed(1)} km — tap to review`
+                  : "Tap to review"}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryNumber}>{vehicles.length}</Text>
@@ -223,6 +264,33 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  pendingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.accentSoft,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+  },
+  pendingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.accent,
+    marginRight: theme.spacing.md,
+  },
+  pendingTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.bold,
+  },
+  pendingSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    marginTop: 2,
   },
   greeting: {
     color: theme.colors.textPrimary,

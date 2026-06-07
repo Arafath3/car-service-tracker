@@ -18,6 +18,15 @@ import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { safeAwait } from "@/lib/asyncWrapper";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
+import { useUnits } from "@/context/UnitContext";
+import {
+  fromKm,
+  toKm,
+  formatDistance,
+  distanceUnitLong,
+  speedUnitShort,
+  distanceUnitShort,
+} from "@/lib/units";
 
 export default function TrackTripScreen() {
   const router = useRouter();
@@ -28,6 +37,7 @@ export default function TrackTripScreen() {
   const [currentSpeed, setCurrentSpeed] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState("");
+  const { system } = useUnits();
 
   const watchSubscription = useRef<Location.LocationSubscription | null>(null);
   const lastLocation = useRef<Location.LocationObject | null>(null);
@@ -158,7 +168,7 @@ export default function TrackTripScreen() {
     }
     setAlertConfig({
       title: "Trip Saved",
-      message: `Distance: ${finalDistance.toFixed(2)} km\nNew odometer: ${newOdometer.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`,
+      message: `Distance: ${formatDistance(finalDistance, system)} ${distanceUnitShort(system)}\nNew odometer: ${formatDistance(newOdometer, system)} ${distanceUnitShort(system)}`,
       buttons: [{ text: "OK", onPress: () => router.back() }],
     });
   };
@@ -211,8 +221,11 @@ export default function TrackTripScreen() {
 
         <View style={styles.distanceCard}>
           <Text style={styles.distanceLabel}>DISTANCE</Text>
-          <Text style={styles.distanceValue}>{distanceKm.toFixed(2)}</Text>
-          <Text style={styles.distanceUnit}>kilometers</Text>
+          <Text style={styles.distanceValue}>
+            {formatDistance(distanceKm, system)}
+          </Text>
+          <Text style={styles.distanceUnit}>{distanceUnitLong(system)}</Text>
+
           {tracking && (
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
@@ -224,8 +237,10 @@ export default function TrackTripScreen() {
         <View style={styles.statRow}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>SPEED</Text>
-            <Text style={styles.statValue}>{currentSpeed.toFixed(0)}</Text>
-            <Text style={styles.statUnit}>km/h</Text>
+            <Text style={styles.statValue}>
+              {fromKm(currentSpeed, system).toFixed(0)}
+            </Text>
+            <Text style={styles.statUnit}>{speedUnitShort(system)}</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>TIME</Text>

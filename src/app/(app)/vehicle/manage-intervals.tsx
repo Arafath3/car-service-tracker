@@ -26,6 +26,8 @@ import {
 } from "@/lib/storage";
 import { useAuth } from "@/context/AuthContext";
 import { trySave } from "@/lib/asyncWrapper";
+import { useUnits } from "@/context/UnitContext";
+import { fromKm, toKm, formatDistance, distanceUnitShort } from "@/lib/units";
 
 export default function ManageIntervalsScreen() {
   const router = useRouter();
@@ -41,6 +43,7 @@ export default function ManageIntervalsScreen() {
   const [newName, setNewName] = useState("");
   const [newKm, setNewKm] = useState("");
   const [error, setError] = useState("");
+  const { system } = useUnits();
 
   useEffect(() => {
     (async () => {
@@ -70,9 +73,9 @@ export default function ManageIntervalsScreen() {
       setError("Enter a service name");
       return;
     }
-    const km = parseFloat(newKm);
+    const km = fromKm(parseFloat(newKm), system);
     if (isNaN(km) || km <= 0) {
-      setError("Enter a valid interval in km");
+      setError(`Enter a valid interval in ${distanceUnitShort(system)}`);
       return;
     }
     if (customs.some((c) => c.serviceType === newName.trim())) {
@@ -220,7 +223,7 @@ export default function ManageIntervalsScreen() {
               placeholder="e.g. Tire Replacement"
             />
             <Input
-              label="Interval (km)"
+              label={`Interval (${distanceUnitShort(system)})`}
               value={newKm}
               onChangeText={setNewKm}
               keyboardType="numeric"

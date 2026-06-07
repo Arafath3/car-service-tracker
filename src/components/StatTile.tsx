@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { theme } from '../theme';
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { theme } from "../theme";
 
 interface Props {
   label: string;
@@ -11,7 +11,12 @@ interface Props {
 
 export const StatTile: React.FC<Props> = ({ label, value, unit, accent }) => {
   return (
-    <View style={[styles.tile, accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : null]}>
+    <View
+      style={[
+        styles.tile,
+        accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : null,
+      ]}
+    >
       <Text style={styles.label}>{label}</Text>
       <View style={styles.valueRow}>
         <Text style={styles.value}>{value}</Text>
@@ -36,11 +41,11 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
     letterSpacing: 1,
     marginBottom: theme.spacing.xs,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   valueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    flexDirection: "row",
+    alignItems: "baseline",
   },
   value: {
     color: theme.colors.textPrimary,

@@ -25,6 +25,12 @@ import { Button } from "@/components/Button";
 import { theme } from "@/theme";
 import { safeAwait, safeRead } from "@/lib/asyncWrapper";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
+import { useUnits } from "@/context/UnitContext";
+import {
+  formatDistance,
+  distanceUnitLong,
+  distanceUnitShort,
+} from "@/lib/units";
 
 export default function VehicleDetailScreen() {
   const router = useRouter();
@@ -38,6 +44,8 @@ export default function VehicleDetailScreen() {
     message?: string;
     buttons?: AlertButton[];
   } | null>(null);
+
+  const { system } = useUnits();
 
   const load = useCallback(async () => {
     if (!vehicleId) return;
@@ -232,20 +240,16 @@ export default function VehicleDetailScreen() {
             </View>
           </View>
           <Text style={styles.odometerValue}>
-            {vehicle.currentOdometer.toLocaleString(undefined, {
-              maximumFractionDigits: 1,
-            })}
+            {formatDistance(vehicle.currentOdometer, system)}
           </Text>
-          <Text style={styles.odometerUnit}>kilometers</Text>
+          <Text style={styles.odometerUnit}>{distanceUnitLong(system)}</Text>
         </TouchableOpacity>
 
         <View style={styles.statRow}>
           <StatTile
             label="Distance Driven"
-            value={totalDistance.toLocaleString(undefined, {
-              maximumFractionDigits: 1,
-            })}
-            unit="km"
+            value={formatDistance(totalDistance, system)}
+            unit={distanceUnitShort(system)}
             accent={theme.colors.accent}
           />
           <View style={{ width: theme.spacing.sm }} />

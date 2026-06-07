@@ -11,7 +11,6 @@ import {
   getDocs,
   setDoc,
   updateDoc,
-  deleteDoc,
   writeBatch,
   increment,
   serverTimestamp,
@@ -26,6 +25,7 @@ import type {
   PendingTrip,
   DetectionConfig,
 } from "@/types";
+import { UnitSystem } from "./units";
 
 const KEYS = {
   VEHICLES: "@st_vehicles",
@@ -481,4 +481,14 @@ export const setAutoDetectionEnabled = async (
   enabled: boolean,
 ): Promise<void> => {
   await AsyncStorage.setItem(AUTO_DETECT_KEY, enabled ? "true" : "false");
+};
+
+// in storage.ts — add to your existing settings/profile read/write
+export const getUnitSystem = async (): Promise<UnitSystem> => {
+  const raw = await AsyncStorage.getItem("unitSystem");
+  return raw === "imperial" ? "imperial" : "metric"; // default metric
+};
+
+export const setUnitSystem = async (system: UnitSystem): Promise<void> => {
+  await AsyncStorage.setItem("unitSystem", system);
 };

@@ -16,6 +16,8 @@ import { addVehicle } from "@/lib/storage";
 import { theme } from "@/theme";
 import type { VehicleType } from "@/types";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
+import { useUnits } from "@/context/UnitContext";
+import { distanceUnitShort } from "@/lib/units";
 
 export default function AddVehicleScreen() {
   const router = useRouter();
@@ -27,6 +29,7 @@ export default function AddVehicleScreen() {
   const [odometer, setOdometer] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const { system } = useUnits();
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
     message?: string;
@@ -183,7 +186,7 @@ export default function AddVehicleScreen() {
             placeholder="e.g. Daily Driver"
           />
           <Input
-            label="Current Odometer (km)"
+            label={`Current Odometer (${distanceUnitShort(system)})`}
             value={odometer}
             onChangeText={setOdometer}
             placeholder="e.g. 45000"

@@ -16,6 +16,8 @@ import { getServiceIntervals } from "@/lib/serviceIntervals";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { theme } from "@/theme";
+import { useUnits } from "@/context/UnitContext";
+import { fromKm, toKm, formatDistance, distanceUnitShort } from "@/lib/units";
 
 export default function AddServiceScreen() {
   const router = useRouter();
@@ -29,7 +31,7 @@ export default function AddServiceScreen() {
   const [nextDueDate, setNextDueDate] = useState(""); // YYYY-MM-DD
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
+  const { system } = useUnits();
   useEffect(() => {
     (async () => {
       if (!vehicleId) return;
@@ -152,7 +154,7 @@ export default function AddServiceScreen() {
           </View>
 
           <Input
-            label="Odometer at service (km)"
+            label={`Odometer at service (${distanceUnitShort(system)})`}
             value={odometer}
             onChangeText={setOdometer}
             keyboardType="numeric"
@@ -179,7 +181,7 @@ export default function AddServiceScreen() {
             FROM MECHANIC STICKER (OPTIONAL)
           </Text>
           <Input
-            label="Next service due at (km)"
+            label={`Next service due at (${distanceUnitShort(system)})`}
             value={nextDueOdometer}
             onChangeText={setNextDueOdometer}
             keyboardType="numeric"

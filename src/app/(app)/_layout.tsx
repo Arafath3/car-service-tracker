@@ -2,6 +2,7 @@ import { Stack, ErrorBoundaryProps } from "expo-router";
 import { View, Text, TouchableOpacity } from "react-native";
 import { theme } from "@/theme";
 import { BluetoothProvider } from "@/context/BluetoothProvider";
+
 // Fallback shown when a screen in this group crashes during render
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
