@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
+  Modal,
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,6 +17,7 @@ import {
   getServicesForVehicle,
   getAwaitingConfirmation,
 } from "@/lib/storage";
+
 import { calculateServiceStatuses } from "@/lib/serviceIntervals";
 import { isPassiveDetectionActive } from "@/lib/passiveDetectionService";
 import { VehicleCard } from "@/components";
@@ -38,6 +39,7 @@ export default function HomeScreen() {
   const [detectionActive, setDetectionActive] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [pending, setPending] = useState<PendingTrip[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
@@ -109,13 +111,11 @@ export default function HomeScreen() {
           </Text>
         </View>
         <TouchableOpacity
-          onPress={() => router.push("/(app)/settings")}
+          onPress={() => setMenuOpen(true)}
+          style={styles.menuBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={{ fontSize: 22 }}>⚙️</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>↗</Text>
+          <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
       </View>
 
@@ -251,6 +251,48 @@ export default function HomeScreen() {
         buttons={alertConfig?.buttons}
         onRequestClose={() => setAlertConfig(null)}
       />
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuBackdrop}
+          activeOpacity={1}
+          onPress={() => setMenuOpen(false)}
+        >
+          <View style={styles.menuSheet}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                router.push("/(app)/settings");
+              }}
+            >
+              <Text style={styles.menuItemIcon}>⚙️</Text>
+              <Text style={styles.menuItemText}>Settings</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                handleLogout();
+              }}
+            >
+              <Text style={styles.menuItemIcon}>↗</Text>
+              <Text
+                style={[styles.menuItemText, { color: theme.colors.danger }]}
+              >
+                Sign Out
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -301,21 +343,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
     marginTop: 2,
-  },
-  logoutBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.bgCard,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoutText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.bold,
   },
   scroll: {
     paddingHorizontal: theme.spacing.xl,
@@ -400,5 +427,57 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     textAlign: "center",
     paddingHorizontal: theme.spacing.xl,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bgCard,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuIcon: {
+    color: theme.colors.textPrimary,
+    fontSize: 20,
+    fontWeight: theme.fontWeight.bold,
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  menuSheet: {
+    position: "absolute",
+    top: 70, // tweak to sit just under your header
+    right: theme.spacing.xl,
+    backgroundColor: theme.colors.bgCard,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    minWidth: 180,
+    paddingVertical: theme.spacing.xs,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  menuItemIcon: { fontSize: 16, marginRight: theme.spacing.md },
+  menuItemText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginHorizontal: theme.spacing.sm,
   },
 });

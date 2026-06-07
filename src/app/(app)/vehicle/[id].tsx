@@ -368,7 +368,8 @@ export default function VehicleDetailScreen() {
                   </Text>
                 </View>
                 <Text style={styles.tripDistance}>
-                  {t.distanceKm.toFixed(2)} km
+                  {formatDistance(t.distanceKm, system)}{" "}
+                  {distanceUnitShort(system)}
                 </Text>
               </View>
             ))}

@@ -562,10 +562,9 @@ export default function ConfirmTripScreen() {
             {allVehicles.map((v) => {
               const isSelected = selectedVehicleId === v.id;
               const isOriginal = v.id === trip.vehicleId;
-              const newOdo = toKm(
-                v.currentOdometer + parseFloat(editedDistance),
-                system,
-              );
+              const newOdoKm =
+                v.currentOdometer +
+                toKm(parseFloat(editedDistance) || 0, system);
               return (
                 <TouchableOpacity
                   key={v.id}
@@ -594,14 +593,9 @@ export default function ConfirmTripScreen() {
                       {v.year} · {v.make} {v.model}
                     </Text>
                     <Text style={styles.vehicleOptionOdo}>
-                      {v.currentOdometer.toLocaleString(undefined, {
-                        maximumFractionDigits: 1,
-                      })}{" "}
-                      →{" "}
-                      {newOdo.toLocaleString(undefined, {
-                        maximumFractionDigits: 1,
-                      })}{" "}
-                      km
+                      {formatDistance(v.currentOdometer, system)} →{" "}
+                      {formatDistance(newOdoKm, system)}{" "}
+                      {distanceUnitShort(system)}
                     </Text>
                   </View>
                   <View
