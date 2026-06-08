@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "735398182032-045pt12rvm0djea02vo90kblc6rmn6rh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.arafath.servicetracker",
+            "certificate_hash": "2999d081ef2bb8b7b24d67bd05bcaa5768e754f9"
+          }
+        },
+        {
           "client_id": "735398182032-k6nora2d5k2cmlducut4r93tm8825pi5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { useAuth } from "@/context/AuthContext";
 import {
   View,
   Text,
@@ -15,6 +16,7 @@ import {
   getTripsForVehicle,
   deleteVehicle,
   updateVehicle,
+  leaveSharedVehicle,
 } from "@/lib/storage";
 import {
   calculateServiceStatuses,
@@ -33,6 +35,7 @@ import {
 } from "@/lib/units";
 
 export default function VehicleDetailScreen() {
+  const { user } = useAuth();
   const router = useRouter();
   const { id: vehicleId } = useLocalSearchParams<{ id: string }>();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
@@ -46,6 +49,15 @@ export default function VehicleDetailScreen() {
   } | null>(null);
 
   const { system } = useUnits();
+
+  const members = vehicle?.memberIds ?? (vehicle ? [vehicle.userId] : []);
+  const isShared = members.length > 1;
+  const amOwner =
+    !!user &&
+    (vehicle?.ownerId === user.id ||
+      (!vehicle?.ownerId && vehicle?.userId === user.id));
+  // a joiner = signed-in, shared vehicle, not the owner
+  const isJoiner = !!user && isShared && !amOwner;
 
   const load = useCallback(async () => {
     if (!vehicleId) return;
@@ -92,9 +104,40 @@ export default function VehicleDetailScreen() {
   );
 
   const handleDelete = () => {
+    if (isJoiner) {
+      setAlertConfig({
+        title: "Leave shared vehicle?",
+        message:
+          "This removes the vehicle from your account. The owner keeps it and its history.",
+        buttons: [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Leave",
+            style: "destructive",
+            onPress: async () => {
+              const [err] = await safeAwait(leaveSharedVehicle(vehicleId!));
+              if (!err) {
+                router.dismissAll?.();
+                router.replace("/(app)");
+              } else {
+                setAlertConfig({
+                  title: "Couldn't leave",
+                  message: "Something went wrong. Please try again.",
+                });
+              }
+            },
+          },
+        ],
+      });
+      return;
+    }
+
+    // Owner (or solo vehicle): real delete
     setAlertConfig({
-      title: "Delete Vehicle",
-      message: "This removes all data. Continue?",
+      title: isShared ? "Delete shared vehicle?" : "Delete Vehicle",
+      message: isShared
+        ? "This permanently deletes the vehicle and its history for everyone sharing it. Continue?"
+        : "This removes all data. Continue?",
       buttons: [
         { text: "Cancel", style: "cancel" },
         {
@@ -102,19 +145,20 @@ export default function VehicleDetailScreen() {
           style: "destructive",
           onPress: async () => {
             const [err] = await safeAwait(deleteVehicle(vehicleId!));
-            if (!err) router.back();
-            else
+            if (!err) {
+              router.dismissAll?.();
+              router.replace("/(app)");
+            } else {
               setAlertConfig({
                 title: "Delete failed",
                 message: "Could not delete this vehicle. Please try again.",
-                buttons: [],
               });
+            }
           },
         },
       ],
     });
   };
-
   if (!vehicle) {
     return (
       <SafeAreaView style={styles.container}>
@@ -138,7 +182,7 @@ export default function VehicleDetailScreen() {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleDelete}>
-          <Text style={styles.deleteText}>Delete</Text>
+          <Text style={styles.deleteText}>{isJoiner ? "Leave" : "Delete"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -311,19 +355,21 @@ export default function VehicleDetailScreen() {
             size="lg"
             style={{ marginTop: theme.spacing.sm }}
           />
-          <Button
-            title="👥 Share Vehicle"
-            onPress={() =>
-              router.push({
-                pathname: "/(app)/vehicle/share",
-                params: { id: vehicle.id },
-              })
-            }
-            variant="ghost"
-            fullWidth
-            size="lg"
-            style={{ marginTop: theme.spacing.sm }}
-          />
+          {user && !user.isGuest && amOwner && (
+            <Button
+              title="👥 Share Vehicle"
+              onPress={() =>
+                router.push({
+                  pathname: "/(app)/vehicle/share",
+                  params: { id: vehicle.id },
+                })
+              }
+              variant="ghost"
+              fullWidth
+              size="lg"
+              style={{ marginTop: theme.spacing.sm }}
+            />
+          )}
         </View>
 
         <Text style={styles.sectionTitle}>SCHEDULED SERVICES</Text>

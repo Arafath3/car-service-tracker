@@ -12,12 +12,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
-import { addVehicle } from "@/lib/storage";
+import { addVehicle, getVehicles, redeemInviteCode } from "@/lib/storage";
 import { theme } from "@/theme";
 import type { VehicleType } from "@/types";
 import { ThemedAlert, AlertButton } from "@/components/ThemedAlert";
 import { useUnits } from "@/context/UnitContext";
 import { distanceUnitShort } from "@/lib/units";
+import { safeAwait } from "@/lib/asyncWrapper";
 
 export default function AddVehicleScreen() {
   const router = useRouter();
@@ -30,6 +31,9 @@ export default function AddVehicleScreen() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const { system } = useUnits();
+  const [joinCode, setJoinCode] = useState("");
+  const [joining, setJoining] = useState(false);
+
   const [alertConfig, setAlertConfig] = useState<{
     title: string;
     message?: string;
@@ -102,6 +106,34 @@ export default function AddVehicleScreen() {
     }
   };
 
+  const handleJoin = async () => {
+    setError("");
+    const trimmed = joinCode.trim().toUpperCase();
+    if (!trimmed) {
+      setError("Enter an invite code to join a shared vehicle.");
+      return;
+    }
+    setJoining(true);
+    const [err, joined] = await safeAwait(redeemInviteCode(trimmed));
+    setJoining(false);
+    if (err || !joined) {
+      const msg = (err as Error)?.message || "";
+      setError(
+        msg.includes("expired")
+          ? "That code has expired. Ask for a new one."
+          : msg.includes("valid")
+            ? "That code isn't valid."
+            : "Couldn't join. Check the code and try again.",
+      );
+      return;
+    }
+    setAlertConfig({
+      title: "Joined!",
+      message: `You now share "${joined.nickname || `${joined.make} ${joined.model}`}". Its odometer stays in sync between you both.`,
+      buttons: [{ text: "OK", onPress: () => router.replace("/(app)") }],
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
@@ -120,6 +152,34 @@ export default function AddVehicleScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
+          <Text style={styles.sectionLabel}>JOIN A SHARED VEHICLE</Text>
+          <Text style={styles.joinHint}>
+            Got an invite code from someone? Enter it to share their vehicle's
+            odometer.
+          </Text>
+          <Input
+            label="Invite code"
+            value={joinCode}
+            onChangeText={(t) => setJoinCode(t.toUpperCase())}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            placeholder="e.g. 7F3K2Q"
+          />
+          <Button
+            title="Join shared vehicle"
+            onPress={handleJoin}
+            loading={joining}
+            variant="secondary"
+            fullWidth
+            size="lg"
+          />
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR ADD A NEW ONE</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <Text style={styles.sectionLabel}>VEHICLE TYPE</Text>
           <View style={styles.typeRow}>
             <TouchableOpacity
@@ -276,5 +336,24 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: theme.fontSize.sm,
     marginBottom: theme.spacing.lg,
+  },
+  joinHint: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    marginBottom: theme.spacing.md,
+    lineHeight: 19,
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: theme.spacing.xl,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: theme.colors.border },
+  dividerText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.bold,
+    letterSpacing: 1.5,
+    marginHorizontal: theme.spacing.md,
   },
 });

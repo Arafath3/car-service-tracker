@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Clipboard,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import type { Vehicle } from "@/types";
@@ -220,37 +220,6 @@ export default function ShareVehicleScreen() {
                 size="lg"
               />
             )}
-
-            {/* JOIN — redeem a code from someone else */}
-            <Text
-              style={[styles.sectionLabel, { marginTop: theme.spacing.xl }]}
-            >
-              JOIN A SHARED VEHICLE
-            </Text>
-            <Text style={styles.hint}>
-              Got a code from someone? Enter it to share their vehicle.
-            </Text>
-            <Input
-              label="Invite code"
-              value={joinCode}
-              onChangeText={(t) => {
-                setJoinCode(t.toUpperCase());
-                setJoinError("");
-              }}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              placeholder="e.g. 7F3K2Q"
-              error={joinError}
-            />
-            <Button
-              title="Join vehicle"
-              onPress={handleJoin}
-              loading={joining}
-              variant="secondary"
-              fullWidth
-              size="lg"
-            />
-
             {/* LEAVE — only shown when actually shared */}
             {isShared && (
               <>

@@ -16,6 +16,7 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
+  deleteDoc,
 } from "@react-native-firebase/firestore";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
@@ -28,7 +29,7 @@ import type {
   DetectionConfig,
 } from "@/types";
 import { UnitSystem } from "./units";
-
+import { safeAwait } from "./asyncWrapper";
 const KEYS = {
   VEHICLES: "@st_vehicles",
   SERVICES: "@st_services",
@@ -538,6 +539,7 @@ export const setUnitSystem = async (system: UnitSystem): Promise<void> => {
 // --- shared vehicle ----
 
 const INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 ambiguity
+const INVITE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const makeInviteCode = (len = 6) =>
   Array.from(
     { length: len },
@@ -551,6 +553,14 @@ export const createInviteCode = async (vehicleId: string): Promise<string> => {
   const vRef = doc(db, "vehicles", vehicleId);
   const vSnap = await getDoc(vRef);
   const data = vSnap.data() as Vehicle | undefined;
+  const stale = await getDocs(
+    query(
+      collection(db, "invites"),
+      where("ownerId", "==", uid),
+      where("vehicleId", "==", vehicleId),
+    ),
+  );
+  await safeAwait(Promise.all(stale.docs.map((d) => deleteDoc(d.ref))));
   if (data && !data.memberIds) {
     await updateDoc(vRef, {
       ownerId: data.ownerId ?? uid,
@@ -567,6 +577,7 @@ export const createInviteCode = async (vehicleId: string): Promise<string> => {
       vehicleId,
       ownerId: uid,
       createdAt: serverTimestamp(),
+      expiresAt: Date.now() + INVITE_TTL_MS,
     });
     return code;
   }
@@ -582,7 +593,14 @@ export const redeemInviteCode = async (rawCode: string): Promise<Vehicle> => {
 
   const inviteSnap = await getDoc(doc(db, "invites", code));
   if (!inviteSnap.exists()) throw new Error("That code isn't valid.");
-  const { vehicleId } = inviteSnap.data() as { vehicleId: string };
+
+  const data = inviteSnap.data() as { vehicleId: string; expiresAt?: number };
+  if (data.expiresAt && Date.now() > data.expiresAt) {
+    // best-effort cleanup; ignore failure (rules only let the owner delete)
+    await safeAwait(deleteDoc(doc(db, "invites", code)));
+    throw new Error("That code has expired. Ask for a new one.");
+  }
+  const { vehicleId } = data;
 
   const vehicleRef = doc(db, "vehicles", vehicleId);
   // arrayUnion is idempotent — rejoining is a no-op, not a duplicate.

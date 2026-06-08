@@ -14,3 +14,4 @@ android/build/
 coverage/
 debug.keystore.backup
 *.keystore
+debug.keystore
